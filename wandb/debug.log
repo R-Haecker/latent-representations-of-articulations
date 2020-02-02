@@ -1,0 +1,15 @@
+2020-02-02 13:07:17,275 DEBUG   MainThread:18158 [wandb_config.py:_load_defaults():111] no defaults not found in config-defaults.yaml
+2020-02-02 13:07:17,332 DEBUG   MainThread:18158 [git_repo.py:repo():30] git repository is invalid
+2020-02-02 13:07:17,447 DEBUG   MainThread:18158 [run_manager.py:__init__():535] Initialized sync for None/logs-2020-02-02T13-07-13
+2020-02-02 13:07:17,454 INFO    MainThread:18158 [run_manager.py:wrap_existing_process():1133] wrapping existing process 18072
+2020-02-02 13:07:17,454 WARNING MainThread:18158 [io_wrap.py:register():104] SIGWINCH handler was not None: <Handlers.SIG_DFL: 0>
+2020-02-02 13:07:17,458 DEBUG   MainThread:18158 [connectionpool.py:_new_conn():959] Starting new HTTPS connection (1): pypi.org:443
+2020-02-02 13:07:17,502 DEBUG   MainThread:18158 [connectionpool.py:_make_request():437] https://pypi.org:443 "GET /pypi/wandb/json HTTP/1.1" 200 39767
+2020-02-02 13:07:17,516 INFO    MainThread:18158 [run_manager.py:init_run():918] system metrics and metadata threads started
+2020-02-02 13:07:17,516 INFO    MainThread:18158 [run_manager.py:init_run():927] checking resume status, waiting at most 10 seconds
+2020-02-02 13:07:17,522 DEBUG   Thread-14 :18158 [connectionpool.py:_new_conn():959] Starting new HTTPS connection (1): api.wandb.ai:443
+2020-02-02 13:07:17,673 DEBUG   Thread-14 :18158 [connectionpool.py:_make_request():437] https://api.wandb.ai:443 "POST /graphql HTTP/1.1" 400 95
+2020-02-02 13:07:17,676 ERROR   Thread-14 :18158 [internal.py:execute():113] 400 response executing GraphQL.
+2020-02-02 13:07:17,676 ERROR   Thread-14 :18158 [internal.py:execute():114] {"errors":[{"message":"name required for model query","path":["model"]}],"data":{"model":null}}
+2020-02-02 13:07:17,696 DEBUG   raven-sentry.BackgroundWorker:18158 [connectionpool.py:_new_conn():959] Starting new HTTPS connection (1): sentry.io:443
+y","path":["model"]}],"data":{"model":null}}
