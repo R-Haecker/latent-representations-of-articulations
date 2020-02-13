@@ -1,21 +1,30 @@
-#code_root: "/export/home/rhaecker/documents/VAE/vae_edflow"
-dataset: ed_vae.DatasetTrain
-validation_dataset: ed_vae.DatasetEval
-model: ed_vae.Model
-iterator: ed_vae.Iterator
-batch_size: 5
-num_epochs: 1
+dataset: dataset.DatasetTrain
+validation_dataset: dataset.DatasetEval
+data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/ae_only_phi"
+validation_split: 0.1
+shuffle_dataset: True
+image_resolution: 64
+
 
 code_root: null
 integrations:
   wandb:
     active: True
-    #name: "edflow_ml"
-    #project: "proj_edflow_ml"
+#    run_id: "test_run_id"
 
-latent_dim: 20
-data_path: "/export/home/rhaecker/documents/VAE/data/vae_max_var"
-image_resolution: 64
-validation_split: 0.2
-shuffle_dataset: True
-random_seed: 42
+iterator: iterator.Iterator
+model: fc_ae.Model
+batch_size: 5
+num_epochs: 15
+
+
+
+bottleneck_size: 5
+#hidden_layer_size:
+hidden_layer_multiplicator: 0
+
+activation_function: "ReLU"
+loss_function: "L2"
+learning_rate: 0.0001
+weight_decay: 0.00001 
+log_freq: 2000
