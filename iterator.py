@@ -4,13 +4,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 import numpy as np
 import torch
-import torchvision
-import torchvision.transforms as transforms
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
-from torch.utils.data import Dataset, DataLoader
 from edflow import TemplateIterator, get_logger
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

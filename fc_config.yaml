@@ -1,0 +1,30 @@
+dataset: dataset.DatasetTrain
+validation_dataset: dataset.DatasetEval
+data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/ae_only_phi"
+validation_split: 0.1
+shuffle_dataset: True
+image_resolution: 64
+
+
+code_root: null
+integrations:
+  wandb:
+    active: True
+#    run_id: "test_run_id"
+
+iterator: iterator.Iterator
+model: fc_ae.Model
+batch_size: 5
+num_epochs: 1
+
+
+
+bottleneck_size: 5
+#hidden_layer_size:
+hidden_layer_multiplicator: 0
+
+activation_function: "ReLU"
+loss_function: "L2"
+learning_rate: 0.0001
+weight_decay: 0.00001 
+log_freq: 2000

@@ -1,33 +1,9 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data.sampler import SubsetRandomSampler
-
-
-import numpy as np
-import torch
 import torchvision
-import torchvision.transforms as transforms
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
-from torch.utils.data import Dataset, DataLoader
 
-
-
+from edflow import get_logger
 import numpy as np
-import matplotlib.pyplot as plt
-from edflow import TemplateIterator, get_logger
-from edflow.data.dataset import DatasetMixin
-
-import os
-from skimage import io, transform
-from PIL import Image
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class Model(nn.Module):
     def __init__(self, config):

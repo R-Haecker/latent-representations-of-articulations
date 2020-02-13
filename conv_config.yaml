@@ -9,19 +9,20 @@ image_resolution: 64
 code_root: null
 integrations:
   wandb:
-    active: True
+    active: False
 #    run_id: "test_run_id"
 
 iterator: iterator.Iterator
-model: fc_ae.Model
+model: conv_ae.Model
 batch_size: 5
-num_epochs: 15
+num_epochs: 1
 
 
-
-bottleneck_size: 5
-#hidden_layer_size:
-hidden_layer_multiplicator: 0
+# Conv parameters
+conv:
+  amount_conv_blocks: 3
+  conv_channels:
+    [32,64,128]
 
 activation_function: "ReLU"
 loss_function: "L2"

@@ -1,24 +1,14 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from edflow import TemplateIterator, get_logger
-from edflow.data.dataset import DatasetMixin
-
 import torch
 import torchvision
 import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
-from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 
-import matplotlib.pyplot as plt
-
-from edflow import TemplateIterator, get_logger
+from edflow import get_logger
 from edflow.data.dataset import DatasetMixin
 
+import numpy as np
+import matplotlib.pyplot as plt
 import os
-from skimage import io, transform
+from skimage import io
 from PIL import Image
 
 
@@ -64,11 +54,11 @@ class Dataset(DatasetMixin):
         # Load training or validation images as well as their indices
         if train:
             self.indices = all_indices[split:]
-            train_sampler = SubsetRandomSampler(self.indices)
+            train_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
             self.dataset = torch.utils.data.DataLoader(self, batch_size=self.batch_size, sampler=train_sampler)
         else:
             self.indices = all_indices[:split]
-            valid_sampler = SubsetRandomSampler(self.indices)
+            valid_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
             self.dataset = torch.utils.data.DataLoader(self, batch_size=self.batch_size, sampler=valid_sampler)
         self.actual_epoch = 0
 
