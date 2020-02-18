@@ -18,20 +18,24 @@ class Iterator(TemplateIterator):
         model = model.to(device)
         
         # loss and optimizer
-        self.criterion = self.get_loss_funct(config)
+        self.criterion = self.get_loss_funct(config["loss_function"])
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config["learning_rate"], weight_decay=self.config["weight_decay"])
+
+        if "track_loss" in self.config:
+            self.track_criterion = self.get_loss_funct(self.config["track_loss"])
+        
 
     def check_config(self, config):
         assert "loss_function" in config, "The config must contain and define a Loss function. possibilities:{'L1','L2'or'MSE','KL'or'KLD'}."
         assert "learning_rate" in config, "The config must contain and define a the learning rate."
         assert "weight_decay" in config, "The config must contain and define a the weight decay."
         
-    def get_loss_funct(self, config):
-        if config["loss_function"] == "L1":
+    def get_loss_funct(self, loss_function):
+        if loss_function == "L1":
             return nn.L1Loss()
-        if config["loss_function"] == "L2" or config["loss_function"] == "MSE":
+        if loss_function == "L2" or loss_function == "MSE":
             return nn.MSELoss()
-        if config["loss_function"] == "KL" or config["loss_function"] == "KLD":
+        if loss_function == "KL" or loss_function == "KLD":
             return nn.KLDivLoss()
 
     def save(self, checkpoint_path):
@@ -65,13 +69,41 @@ class Iterator(TemplateIterator):
         mean_loss = torch.mean(loss)
         min_loss = np.min(loss.cpu().detach().numpy())
         max_loss = np.max(loss.cpu().detach().numpy())    
-        log_dict = {
+        
+        if "track_loss" in self.config:
+            track_loss = self.track_criterion(outputs, inputs)
+            track_mean_loss = torch.mean(track_loss)
+            track_min_loss = np.min(track_loss.cpu().detach().numpy())
+            track_max_loss = np.max(track_loss.cpu().detach().numpy())    
+            log_dict = {
                 "images": {"inputs": inputs.cpu().detach().permute(0,2,3,1).numpy(),"outputs": outputs.cpu().detach().permute(0,2,3,1).numpy()},
                 "scalars": 
                 {
-                    "min_loss": min_loss,
-                    "max_loss": max_loss,
-                    "mean_loss": mean_loss,
+                    self.config["loss_function"]:
+                    {
+                        "min_loss": min_loss,
+                        "max_loss": max_loss,
+                        "mean_loss": mean_loss
+                    },
+                    self.config["track_loss"]:
+                    {
+                        "min_loss": track_min_loss,
+                        "max_loss": track_max_loss,
+                        "mean_loss": track_mean_loss
+                    }
+                }
+            }
+        else:
+            log_dict = {
+                "images": {"inputs": inputs.cpu().detach().permute(0,2,3,1).numpy(),"outputs": outputs.cpu().detach().permute(0,2,3,1).numpy()},
+                "scalars": 
+                {
+                    self.config["loss_function"]:
+                    {
+                        "min_loss": min_loss,
+                        "max_loss": max_loss,
+                        "mean_loss": mean_loss
+                    }    
                 }
             }
 

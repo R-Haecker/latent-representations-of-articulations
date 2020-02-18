@@ -41,7 +41,7 @@ class Dataset(DatasetMixin):
         
         # Load parameters from config
         self.batch_size = config["batch_size"]
-        self.latent_dim = config["bottleneck_size"]
+        #self.latent_dim = config["linear"]["bottleneck_size"]
         # Load every indices from all images
         all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
         
@@ -111,7 +111,7 @@ class Dataset(DatasetMixin):
                 path_fig=self.data_path + "/figures/first_run_150e/"
                 if not os.path.isdir(path_fig):
                     os.mkdir(path_fig)
-                plt.savefig( path_fig + "figure_latent_dim_"+ str(self.latent_dim) +"_"+str(name)+".png")
+                #plt.savefig( path_fig + "figure_latent_dim_"+ str(self.latent_dim) +"_"+str(name)+".png")
             plt.show()
 
 class DatasetTrain(Dataset):

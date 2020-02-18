@@ -17,19 +17,20 @@ model: conv_ae.Model
 batch_size: 5
 num_epochs: 1
 
+explanation: "Convolution and linear test size of kernel and stride"
 
 # Conv parameters
 conv:
   amount_conv_blocks: 2
-  kernel_size: 5
-  stride: 1
+  kernel_size: 2
+  stride: 2
   conv_channels:
     [3,32,64]
-  padding: 2
+  #padding: 1
 linear:
-  bottleneck_size: 10
+  bottleneck_size: 5
 
-upsample: 'nearest'
+#upsample: 'nearest'
 #'linear', 'bilinear', 'bicubic'
 
 activation_function: "ReLU"

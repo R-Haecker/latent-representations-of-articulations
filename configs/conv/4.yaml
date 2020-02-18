@@ -9,27 +9,28 @@ image_resolution: [64,64]
 code_root: null
 integrations:
   wandb:
-    active: False
+    active: True
 #    run_id: "test_run_id"
 
 iterator: iterator.Iterator
 model: conv_ae.Model
 batch_size: 5
-num_epochs: 1
+num_epochs: 100
 
+explanation: "Only convolution test size of kernel and stride"
 
 # Conv parameters
 conv:
   amount_conv_blocks: 2
-  kernel_size: 5
-  stride: 1
+  kernel_size: 3
+  stride: 3
   conv_channels:
     [3,32,64]
-  padding: 2
-linear:
-  bottleneck_size: 10
+  #padding: 1
+#linear:
+#  bottleneck_size: 10
 
-upsample: 'nearest'
+#upsample: 'nearest'
 #'linear', 'bilinear', 'bicubic'
 
 activation_function: "ReLU"
