@@ -1,0 +1,47 @@
+dataset: dataset.DatasetTrain
+validation_dataset: dataset.DatasetEval
+data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/ae_only_phi"
+validation_split: 0.1
+shuffle_dataset: True
+image_resolution: [64,64]
+
+CUDA_VISIBLE_DEVICES: "7"
+
+code_root: null
+integrations:
+  wandb:
+    active: True
+
+iterator: iterator.Iterator
+model: conv_ae.Model
+batch_size: 5
+num_epochs: 50
+
+activation_function: "ReLU"
+loss_function: "L2"
+track_loss: "L1"
+learning_rate: 0.0001
+weight_decay: 0.00001 
+#log_freq: 2000
+
+explanation: "Convolutional (same spacial size) and up/downsample with linear layer net with a varying latent dimension."
+
+#variational:
+#  sigma: False
+
+# Conv parameters
+conv:
+  amount_conv_blocks: 2
+  kernel_size: 3
+  stride: 1
+  conv_channels:
+    [3,32,64]
+  #padding: 2
+
+upsample: 'bilinear'
+#'linear', 'nearest', 'bicubic'
+
+linear:
+  latent_dim: 64
+
+

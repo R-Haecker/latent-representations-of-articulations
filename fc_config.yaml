@@ -19,7 +19,7 @@ num_epochs: 1
 
 
 
-bottleneck_size: 5
+latent_dim: 5
 #hidden_layer_size:
 hidden_layer_multiplicator: 0
 

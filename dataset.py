@@ -41,7 +41,7 @@ class Dataset(DatasetMixin):
         
         # Load parameters from config
         self.batch_size = config["batch_size"]
-        #self.latent_dim = config["linear"]["bottleneck_size"]
+        #self.latent_dim = config["linear"]["latent_dim"]
         # Load every indices from all images
         all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
         

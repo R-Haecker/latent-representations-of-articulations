@@ -17,7 +17,7 @@ model: conv_ae.Model
 batch_size: 5
 num_epochs: 100
 
-explanation: "Only convolution test size of kernel and stride"
+explanation: "Short test for convolution size of kernel and stride"
 
 # Conv parameters
 conv:
@@ -38,4 +38,3 @@ loss_function: "L2"
 track_loss: "L1"
 learning_rate: 0.0001
 weight_decay: 0.00001 
-log_freq: 2000

@@ -25,7 +25,7 @@ class Model(nn.Module):
             assert "hidden_layer_size" in config, "For this model with only fully connected layer you have to specify how many neurons are in the hidden layers."
         else:
             config["hidden_layer_size"] = int(config["image_resolution"][0]*config["image_resolution"][1]*3*config["hidden_layer_multiplicator"]*config["batch_size"])
-        assert "bottleneck_size" in config, "For this model with only fully connected layer you have to specify how many numbers represent the bottleneck."
+        assert "latent_dim" in config, "For this model with only fully connected layer you have to specify how many numbers represent the bottleneck."
 
     def get_act_func(self, config):
         if config["activation_function"] == "ReLU":
@@ -65,10 +65,10 @@ class encoder(nn.Module):
         self.act_func = act_func
         self.config = config 
         if config["hidden_layer_size"]==0:
-            self.fc = nn.Linear(in_features = config["image_resolution"][0]*config["image_resolution"][1]*3, out_features = config["bottleneck_size"]) 
+            self.fc = nn.Linear(in_features = config["image_resolution"][0]*config["image_resolution"][1]*3, out_features = config["latent_dim"]) 
         else:
             self.fc1 = nn.Linear(in_features = config["image_resolution"][0]*config["image_resolution"][1]*3, out_features = config["hidden_layer_size"])
-            self.fc2 = nn.Linear(in_features = config["hidden_layer_size"], out_features= config["bottleneck_size"])
+            self.fc2 = nn.Linear(in_features = config["hidden_layer_size"], out_features= config["latent_dim"])
 
     def forward(self,x):
         x = x.view(self.config["batch_size"],-1)
@@ -86,10 +86,10 @@ class decoder(nn.Module):
         self.act_func = act_func
         self.Tanh = nn.Tanh()
         if config["hidden_layer_size"]==0:
-            self.fc = nn.Linear(in_features = config["bottleneck_size"], out_features = config["image_resolution"][0]*config["image_resolution"][1]*3)
+            self.fc = nn.Linear(in_features = config["latent_dim"], out_features = config["image_resolution"][0]*config["image_resolution"][1]*3)
             self.hidden_layer = False
         else:
-            self.fc1 = nn.Linear(in_features = config["bottleneck_size"], out_features = config["hidden_layer_size"])
+            self.fc1 = nn.Linear(in_features = config["latent_dim"], out_features = config["hidden_layer_size"])
             self.fc2 = nn.Linear(in_features = config["hidden_layer_size"], out_features = config["image_resolution"][0]*config["image_resolution"][1]*3)
             self.hidden_layer = True
     def forward(self, x):
