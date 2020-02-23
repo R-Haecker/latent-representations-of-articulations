@@ -2,3 +2,4 @@
 test.py
 wandb/
 data/ae_only_phi/images/*
+data/*
