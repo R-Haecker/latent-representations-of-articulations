@@ -29,7 +29,7 @@ explanation: "Convolutional auto encoder without down/upsampling in 3 blocks on 
 variational:
   sigma: False
   tanh:
-    mean: 7000
+    mean: 8000
     width: 400
     factor: 0.001
 

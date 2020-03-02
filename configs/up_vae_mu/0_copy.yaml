@@ -10,7 +10,7 @@ image_resolution: [64,64]
 code_root: null
 integrations:
   wandb:
-    active: True
+    active: False
 
 iterator: iterator.Iterator
 model: conv_ae.Model
@@ -29,7 +29,7 @@ explanation: "Convolutional auto encoder without down/upsampling in 3 blocks on 
 variational:
   sigma: False
   tanh:
-    mean: 7000
+    mean: 5000
     width: 400
     factor: 0.001
 

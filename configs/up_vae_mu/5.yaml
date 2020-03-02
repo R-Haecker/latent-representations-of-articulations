@@ -19,7 +19,6 @@ num_epochs: 200
 
 activation_function: "ReLU"
 loss_function: "L2"
-track_loss: "L1"
 learning_rate: 0.0001
 weight_decay: 0.00001 
 #log_freq: 2000
@@ -29,7 +28,7 @@ explanation: "Convolutional auto encoder without down/upsampling in 3 blocks on 
 variational:
   sigma: False
   tanh:
-    mean: 7000
+    mean: 20000
     width: 400
     factor: 0.001
 

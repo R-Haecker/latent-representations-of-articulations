@@ -50,7 +50,7 @@ class Model(nn.Module):
         """        
         tensor_shapes = []
         # The first shape is specified in the config
-        tensor_shapes.append([self.config["batch_size"], 3, self.config["image_resolution"][0],self.config["image_resolution"][1]])
+        tensor_shapes.append([3, self.config["image_resolution"][0],self.config["image_resolution"][1]])
         # calculate the shape after a convolutuonal operation
         if (self.config["conv"]["kernel_size"] == 4 and self.config["conv"]["stride"] == 3) or (self.config["conv"]["kernel_size"] == 6 and self.config["conv"]["stride"] == 3):
             # these cases just have one less spacial dimension in the last iteration...  
@@ -62,7 +62,7 @@ class Model(nn.Module):
                     spacial_res = int(np.floor(spacial_res/2) +1) 
                 if i == self.config["conv"]["amount_conv_blocks"]-1:
                     spacial_res = int(spacial_res - 1 )
-                tensor_shapes.append([self.config["batch_size"], self.config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])    
+                tensor_shapes.append([self.config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])    
         else:
             # normal formular to compute the tensor shapes     
             for i in range(self.config["conv"]["amount_conv_blocks"]): 
@@ -71,14 +71,14 @@ class Model(nn.Module):
                             /self.config["conv"]["stride"] + 1) + 1)
                 if "upsample" in self.config:
                     spacial_res = int(np.floor(spacial_res/2) +1) 
-                tensor_shapes.append([self.config["batch_size"], self.config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])
+                tensor_shapes.append([self.config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])
         
         # add the shape of the flatten image if a fc linaer layer is available
         if "linear" in self.config:
             if "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
-                flatten_rep = tensor_shapes[self.config["conv"]["amount_conv_blocks"]][2] * tensor_shapes[self.config["conv"]["amount_conv_blocks"]][3] * self.config["conv"]["conv_channels"][self.config["conv"]["amount_conv_blocks"]]
-                tensor_shapes.append([self.config["batch_size"], flatten_rep])
-                tensor_shapes.append([self.config["batch_size"], self.config["linear"]["latent_dim"]])
+                flatten_rep = tensor_shapes[self.config["conv"]["amount_conv_blocks"]][1] * tensor_shapes[self.config["conv"]["amount_conv_blocks"]][2] * self.config["conv"]["conv_channels"][self.config["conv"]["amount_conv_blocks"]]
+                tensor_shapes.append([flatten_rep])
+                tensor_shapes.append([self.config["linear"]["latent_dim"]])
         return tensor_shapes
 
     def check_config(self):
@@ -159,10 +159,10 @@ class encoder(nn.Module):
         if "linear" in self.config:
             if "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
                 if "variational" in self.config and "sigma" in self.config["variational"] and self.config["variational"]["sigma"]:
-                    self.lin_mu = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][1], out_features = self.config["linear"]["latent_dim"])
-                    self.lin_sig = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][1], out_features = self.config["linear"]["latent_dim"])
+                    self.lin_mu = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0], out_features = self.config["linear"]["latent_dim"])
+                    self.lin_sig = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0], out_features = self.config["linear"]["latent_dim"])
                 else:
-                    self.lin_layer = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][1], out_features = self.config["linear"]["latent_dim"])
+                    self.lin_layer = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0], out_features = self.config["linear"]["latent_dim"])
 
     def get_blocks(self):
         """Create the convolutional blocks specified in the config. 
@@ -191,11 +191,11 @@ class encoder(nn.Module):
         x = self.conv_seq(x)
         if "variational" in self.config:
             if "sigma" in self.config["variational"] and self.config["variational"]["sigma"]:
-                x = x.view(self.config["batch_size"], -1)
+                x = x.view(-1, self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
                 # maybe absolut value of sigma act ReLu
                 x = [self.lin_mu(x), torch.abs(self.lin_sig(x))]
             else:
-                x = x.view(self.config["batch_size"], -1)
+                x = x.view(-1, self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
                 x = self.lin_layer(x)
 
         elif "linear" in self.config and "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
@@ -203,7 +203,7 @@ class encoder(nn.Module):
             # flatten the image representation
             self.logger.debug("befor Linear layer: x.shape == " + str(x.shape))
             #print(("befor Linear layer: x.shape == " + str(x.shape)))
-            x = x.view(self.config["batch_size"], -1)
+            x = x.view(-1, self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
             self.logger.debug("befor Linear layer: x.shape == " + str(x.shape))
             #print("befor Linear layer: x.shape == " + str(x.shape))
             # use fc layer and the activation function
@@ -220,7 +220,7 @@ class decoder(nn.Module):
         self.tensor_shapes = tensor_shapes
         if "linear" in self.config:
             if "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
-                self.lin_layer = nn.Linear(in_features = self.config["linear"]["latent_dim"], out_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][1])
+                self.lin_layer = nn.Linear(in_features = self.config["linear"]["latent_dim"], out_features = self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
         self.conv_seq = self.get_blocks()
 
         self.Tanh = nn.Tanh()
@@ -235,7 +235,7 @@ class decoder(nn.Module):
         convT_modules_list = []
         for i in range(self.config["conv"]["amount_conv_blocks"], 0, -1):
             if "upsample" in self.config:
-                convT_modules_list.append(nn.Upsample(size = self.tensor_shapes[i-1][2:], mode = self.config["upsample"]))
+                convT_modules_list.append(nn.Upsample(size = self.tensor_shapes[i-1][1:], mode = self.config["upsample"]))
                 #print("upsample size:",self.tensor_shapes[i-1][2:])
             convT_modules_list.append(
                     nn.ConvTranspose2d(in_channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i-1], 
@@ -268,27 +268,30 @@ class decoder(nn.Module):
             if "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
                 if "variational" in self.config:
                     norm_dist = torch.distributions.normal.Normal(torch.zeros([self.config["linear"]["latent_dim"]]), torch.ones([self.config["linear"]["latent_dim"]]))
-                    eps = norm_dist.sample().to(self.device)
+                    eps = norm_dist.sample().to(self.device)#.double()
                     if "sigma" in self.config["variational"] and self.config["variational"]["sigma"]:
                         mu = x[0]
                         var = x[1]
                         z = mu + var * eps
                     else:
                         #print("mu.shape:",x.shape)
+                        #print("type(mu):",type(x))
                         #print("mu:",x)
                         mu = x
                         z = mu + eps
-                else:           
+                else:        
                     z = x
+                #print("anything")
                 self.z = z
                 x = self.act_func(self.lin_layer(z))
-                x = x.reshape(*self.tensor_shapes[self.config["conv"]["amount_conv_blocks"]])
+                x = x.reshape(-1,*self.tensor_shapes[self.config["conv"]["amount_conv_blocks"]])
         else:
             self.z = x
         x = self.Tanh(self.conv_seq(x))
         #x = torch.reshape(x, (self.config["batch_size"],3,self.config["image_resolution"][0],self.config["image_resolution"][1]))
         return x
 
+#TODO log the spacial sizes everywhere in wandb
 
 #############################
 #########  Testing  #########
@@ -300,8 +303,12 @@ import yaml
 with open("conv_config.yaml") as fh:
     config_y = yaml.full_load(fh)    
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 ae = Model(config = config_y)
+ae = ae.to(device)
 x = torch.zeros([5,3,64,64])
+x = x.to(device)
 out = ae(x)
 
 
