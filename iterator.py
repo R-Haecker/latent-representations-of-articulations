@@ -28,7 +28,7 @@ class Iterator(TemplateIterator):
         self.logger = get_logger("Iterator")
         self.check_config(config)
         self.logger.debug(f"{model}")
-        self.logger.debug(f"{self.device}")
+        self.logger.debug(f"Model will be move to the device: {self.device}")
 
         model = model.to(self.device)
         # loss and optimizer
@@ -37,7 +37,10 @@ class Iterator(TemplateIterator):
 
         if "track_loss" in self.config:
             self.track_criterion = self.get_loss_funct(self.config["track_loss"])
+        if "variational" in self.config:
+            self.sigmoid_x_offset = self.offset_requlator()
 
+    
     def check_config(self, config):
         assert "loss_function" in config, "The config must contain and define a Loss function. possibilities:{'L1','L2'or'MSE','KL'or'KLD'}."
         assert "learning_rate" in config, "The config must contain and define a the learning rate."
@@ -63,6 +66,22 @@ class Iterator(TemplateIterator):
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
 
+    def offset_requlator(self):
+        # check for all parameter
+        if "sigmoid_regulator" in self.config["variational"] and "start_step" in self.config["variational"]["sigmoid_regulator"] and "start_amplitude" in self.config["variational"]["sigmoid_regulator"] and "width" in self.config["variational"]["sigmoid_regulator"] and "amplitude" in self.config["variational"]["sigmoid_regulator"]:
+            sigmoid_x_offset = self.config["variational"]["sigmoid_regulator"]["start_step"] - self.config["variational"]["sigmoid_regulator"]["width"]/3 * (np.tan((2*self.config["variational"]["sigmoid_regulator"]["start_amplitude"])/self.config["variational"]["sigmoid_regulator"]["amplitude"] - 1))
+        else:
+            self.logger.info("parameters for sigmoid regulator are not specified now choosing default.")
+            self.config["variational"]["sigmoid_regulator"]["start_step"] = 50000
+            self.config["variational"]["sigmoid_regulator"]["start_amplitude"] = 10**(-5) 
+            self.config["variational"]["sigmoid_regulator"]["width"] = 2000
+            self.config["variational"]["sigmoid_regulator"]["amplitude"] = 0.001
+            sigmoid_x_offset = self.offset_requlator()
+        return sigmoid_x_offset
+
+    def sigmoid_regulator(self, step):
+        return self.config["variational"]["sigmoid_regulator"]["amplitude"] * (0.5 + 0.5 * np.tanh((step - self.sigmoid_x_offset)*3/self.config["variational"]["sigmoid_regulator"]["width"]))
+
     def step_op(self, model, **kwargs):
         # get inputs
         inputs = kwargs["image"]
@@ -83,20 +102,12 @@ class Iterator(TemplateIterator):
         if "variational" in self.config:
             step = torch.tensor(self.get_global_step(), dtype = torch.float)
             abs_z = torch.mean(torch.abs(model.z))
-            if "tanh" in self.config["variational"]:
-                    if "mean" in self.config["variational"]["tanh"] and "width" in self.config["variational"]["tanh"] and "factor" in self.config["variational"]["tanh"]:
-                        regulator = self.config["variational"]["tanh"]["factor"] * (0.5 + 0.5 * nn.functional.tanh((step - self.config["variational"]["tanh"]["mean"])/self.config["variational"]["tanh"]["width"]))
-                    else:
-                        regulator = 0.5 * (0.5 + 0.5 * nn.functional.tanh((step-1000)/150))
-            regulator = regulator.to(self.device)
-            abs_loss = regulator * abs_z
-            #print("abs_z:", abs_z)
-            #print("regulator:", regulator)
-            #print("abs_loss:", abs_loss)
-            #print("mean_loss:", mean_loss)
+            # force absolute value of latent representation (with a regulation factor) into the loss to minimize them
+            abs_loss = self.sigmoid_regulator(step).to(self.device) * abs_z
+            
             if "sigma" in self.config["variational"] and self.config["variational"]["sigma"]:
                 print("not ready yet")
-                # implement kl loss
+                #TODO implement kl loss
             else:
                 mean_loss += abs_loss
             
@@ -199,7 +210,6 @@ def callback_latent(root, data_in, data_out, config):
     pc_start = [0,2,4,6]
     for i in range(len(pc_start)):
         view_two_added_pc(model=vae, eig_vec=eig_vec, run_name=run_name, config = config, mu = 0, delta = 50, pc_num_start=pc_start[i], num_images_x=8, num_images_y=8, save=True, figures_path=figures_path)
-    
 
 def plot_eig_val(eig_val, figures_path, save):
     idx_lambda = np.arange(0,len(eig_val),1)

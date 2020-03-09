@@ -3,18 +3,20 @@ import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 
+#import edflow.custom_logging
 from edflow import get_logger
+from edflow.custom_logging import LogSingleton
 import numpy as np
 
 class Model(nn.Module):
     def __init__(self, config):
         super(Model, self).__init__()
+        LogSingleton.set_log_level("debug")
         self.logger = get_logger("Model")
         self.config = config
         self.check_config()
         self.tensor_shapes = self.get_tensor_shapes()
-        #print(self.tensor_shapes)
-        self.logger.debug(str(self.tensor_shapes))
+        self.logger.info(str(self.tensor_shapes))
 
         self.act_func = self.get_act_func()
         self.enc = encoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes)
@@ -36,7 +38,6 @@ class Model(nn.Module):
     def forward(self, x):
         z = self.enc(x)
         self.logger.debug("encoder output: " + str(z.shape))
-        #print("encoder output: " + str(z.shape))
         x = self.dec(z)
         self.z = self.dec.z
         self.logger.debug("decoder output: " + str(x.shape))
@@ -52,7 +53,7 @@ class Model(nn.Module):
         # The first shape is specified in the config
         tensor_shapes.append([3, self.config["image_resolution"][0],self.config["image_resolution"][1]])
         # calculate the shape after a convolutuonal operation
-        if (self.config["conv"]["kernel_size"] == 4 and self.config["conv"]["stride"] == 3) or (self.config["conv"]["kernel_size"] == 6 and self.config["conv"]["stride"] == 3):
+        if ([ self.config["conv"]["kernel_size"], self.config["conv"]["stride"] ] in [[4,3],[6,3]] or ("upsample" in self.config and [ self.config["conv"]["kernel_size"], self.config["conv"]["stride"] ] in [[2,2],[3,3],[4,4]])):
             # these cases just have one less spacial dimension in the last iteration...  
             for i in range(self.config["conv"]["amount_conv_blocks"]): 
                 # calculate the spacial resolution
@@ -108,9 +109,9 @@ class Model(nn.Module):
                     assert 1==0, "Kernal size is too big."
                 self.logger.debug("Padding of the convolutions is set to " + str(self.config["conv"]["padding"]))
         
-        if "upsample" in self.config:
-            assert self.config["conv"]["stride"] == 1, "For now if you want to upsample/downsample you can only use convolutions wich keep the spacial size the same. You have to use stride = 1."
-            assert self.config["conv"]["kernel_size"]%2 == 1, "For now if you want to upsample/downsample you can only use convolutions wich keep the spacial size the same. You have to use an odd kernal size."
+        #if "upsample" in self.config:
+            #assert self.config["conv"]["stride"] == 1, "For now if you want to upsample/downsample you can only use convolutions wich keep the spacial size the same. You have to use stride = 1."
+            #assert self.config["conv"]["kernel_size"]%2 == 1, "For now if you want to upsample/downsample you can only use convolutions wich keep the spacial size the same. You have to use an odd kernal size."
         if "variational" in self.config:
             assert "linear" in self.config and "latent_dim" in self.config["linear"] and self.config["linear"]["latent_dim"] != 0, "If you want to use a variational auto encoder you have to use a linear layer at the bottleneck. Specify 'linear' and within 'latent_dim' in the config wich has to be none zero."
 
@@ -189,13 +190,19 @@ class encoder(nn.Module):
     def forward(self,x):
         # Apply all modules in the seqence
         x = self.conv_seq(x)
+        self.logger.debug("after all conv blocks x.shape: " + str(x.shape))
         if "variational" in self.config:
             if "sigma" in self.config["variational"] and self.config["variational"]["sigma"]:
                 x = x.view(-1, self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
+                self.logger.debug("Shape should be: [" + str(config["batch_size"]) + "," + str(self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0]) + "]")
+                self.logger.debug("Shape is x.shape: " + str(c.shape))
                 # maybe absolut value of sigma act ReLu
                 x = [self.lin_mu(x), torch.abs(self.lin_sig(x))]
             else:
+                self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0]) + "]")
+                self.logger.debug("Shape is x.shape: " + str(x.shape))
                 x = x.view(-1, self.tensor_shapes[self.config["conv"]["amount_conv_blocks"] + 1][0])
+                self.logger.debug("Shape is x.shape: " + str(x.shape))
                 x = self.lin_layer(x)
 
         elif "linear" in self.config and "latent_dim" in self.config["linear"] and not self.config["linear"]["latent_dim"] == 0:
@@ -215,6 +222,7 @@ class decoder(nn.Module):
     def __init__(self, config, act_func, tensor_shapes):
         super(decoder,self).__init__()
         self.config = config
+        self.logger = get_logger("Model_decoder")
         self.act_func = act_func
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tensor_shapes = tensor_shapes
@@ -234,9 +242,20 @@ class decoder(nn.Module):
         # downsampling with convolutions
         convT_modules_list = []
         for i in range(self.config["conv"]["amount_conv_blocks"], 0, -1):
-            if "upsample" in self.config:
+            if "upsample" in self.config and [self.config["conv"]["kernel_size"], self.config["conv"]["stride"]] in [[1,1],[3,1],[5,1]]:
+                self.logger.debug("upsample size: " + str(self.tensor_shapes[i-1][1:]))
                 convT_modules_list.append(nn.Upsample(size = self.tensor_shapes[i-1][1:], mode = self.config["upsample"]))
-                #print("upsample size:",self.tensor_shapes[i-1][2:])
+            elif "upsample" in self.config and [self.config["conv"]["kernel_size"], self.config["conv"]["stride"]] in [[2,2],[4,4]]:
+                spacial_size = int(np.floor(self.tensor_shapes[i-1][-1]/self.config["conv"]["kernel_size"]))
+                spacial_size = [spacial_size,spacial_size]
+                self.logger.debug("upsample size: " + str(spacial_size))
+                convT_modules_list.append(nn.Upsample(size = spacial_size, mode = self.config["upsample"]))
+            elif "upsample" in self.config and [self.config["conv"]["kernel_size"], self.config["conv"]["stride"]] in [[3,3]]:
+                spacial_size = int(np.floor(self.tensor_shapes[i-1][-1]/self.config["conv"]["kernel_size"]+1))
+                spacial_size = [spacial_size,spacial_size]
+                self.logger.debug("upsample size: " + str(spacial_size))
+                convT_modules_list.append(nn.Upsample(size = spacial_size, mode = self.config["upsample"]))
+
             convT_modules_list.append(
                     nn.ConvTranspose2d(in_channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i-1], 
                                         kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], 

@@ -1,30 +1,22 @@
-# info for run
-code_root: null
-integrations:
-  wandb:
-    active: True
-#CUDA_VISIBLE_DEVICES: "7"
-#explanation: "VAE-vae_var_some_sky--3_conv_blocks_up_nearest_var_conv."
-
-# Dataset info
 dataset: dataset.DatasetTrain
 validation_dataset: dataset.DatasetEval
 data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/vae_var_some_sky"
-request_parameters: True
-request_pose: False
-# request_tri_images: False
+
 validation_split: 0.1
 shuffle_dataset: True
 image_resolution: [64,64]
 
-# Iterator info
+#CUDA_VISIBLE_DEVICES: "7"
+
+code_root: null
+integrations:
+  wandb:
+    active: True
+
 iterator: iterator.Iterator
 model: conv_ae.Model
 batch_size: 1
-num_epochs: 150
-
-
-# Model info
+num_epochs: 50
 
 activation_function: "ReLU"
 loss_function: "L2"
@@ -33,12 +25,14 @@ learning_rate: 0.0001
 weight_decay: 0.00001 
 #log_freq: 2000
 
+explanation: "VAE-vae_var_some_sky--3_conv_blocks_up_nearest_var_conv."
+
 variational:
   sigma: False
   sigmoid_regulator:
     start_amplitude: 1.E-5
-    start_step: 60000
-    width: 500
+    start_step: 50000
+    width: 400
     amplitude: 0.001
 
 # Conv parameters

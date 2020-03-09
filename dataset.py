@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import os
 from skimage import io
 from PIL import Image
-
+import json
 
 class Dataset(DatasetMixin):
     def __init__(self, config, train=False):
@@ -40,7 +40,7 @@ class Dataset(DatasetMixin):
             self.transform = torchvision.transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
         
         # Load parameters from config
-        self.batch_size = config["batch_size"]
+        self.config = config
         #self.latent_dim = config["linear"]["latent_dim"]
         # Load every indices from all images
         all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
@@ -55,11 +55,11 @@ class Dataset(DatasetMixin):
         if train:
             self.indices = all_indices[split:]
             train_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
-            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.batch_size, sampler=train_sampler)
+            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.config["batch_size"], sampler=train_sampler)
         else:
             self.indices = all_indices[:split]
             valid_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
-            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.batch_size, sampler=valid_sampler)
+            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.config["batch_size"], sampler=valid_sampler)
         self.actual_epoch = 0
 
     def __len__(self):
@@ -78,23 +78,37 @@ class Dataset(DatasetMixin):
         :return: Dictionary with the image at the key 'image'.
         :rtype: Dictionary
         """
+        example = {}
         idx = self.indices[int(idx)]
+        # load a json file with all parameters which define the image 
+        if "request_parameters" in self.config and self.config["request_parameters"]:
+            parameter_path = os.path.join(self.data_path, "parameters/parameters_index_" + str(idx) + ".json")
+            with open(parameter_path) as f:
+              parameters = json.load(f)
+            example["parameters"] = parameters
+        # load an image of the pose if requested
+        if "request_pose" in self.config and self.config["request_pose"]:
+            image_pose_path = os.path.join(self.data_path, "images_poses/image_index_" + str(idx) + ".png")
+            # Load pose image
+            pose_image = Image.fromarray(io.imread(image_pose_path))
+            if self.transform:
+                pose_image = self.transform(pose_image)
+            example["pose"] = pose_image            
         # Load image
-        img_name = os.path.join(self.data_path, "images/image_index_" + str(idx) + ".png")
-        image = io.imread(img_name)
-        image = Image.fromarray(image)
+        image_path = os.path.join(self.data_path, "images/image_index_" + str(idx) + ".png")
+        image = Image.fromarray(io.imread(image_path))
         if self.transform:
             image = self.transform(image)
-        # Return dictionary
-        sample = {'image': image}
-        return sample
+        example["image"] = image
+        # Return example dictionary
+        return example
 
     def plot(self, image, name=None):
         if type(image)==dict:
             image = image["image"]
         with torch.no_grad():
-            if image.shape[0]==self.batch_size:
-                te = torch.zeros(self.batch_size,1024,1024,3,requires_grad=False)
+            if image.shape[0]==self.config["batch_size"]:
+                te = torch.zeros(self.config["batch_size"],1024,1024,3,requires_grad=False)
                 te = torch.Tensor.permute(image,0,2,3,1)
                 plt.figure(figsize=(20,5))
                 te = (te/2+0.5).cpu()
