@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 
 from edflow import get_logger
 from edflow.data.dataset import DatasetMixin
+from edflow.util import edprint
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -43,7 +44,13 @@ class Dataset(DatasetMixin):
         self.config = config
         #self.latent_dim = config["linear"]["latent_dim"]
         # Load every indices from all images
-        all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
+        if "request_tri" in self.config and self.config["request_tri"]:
+            every_indices = [int(s[12:-6]) for s in os.listdir(self.data_path + "/images/")]
+            all_indices = []
+            for i in range(int(np.floor(len(every_indices)/3))):
+                all_indices.append(every_indices[i*3])
+        else:
+            all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
         
         # Split data into validation and training data 
         split = int(np.floor(config["validation_split"] * len(all_indices)))
@@ -55,11 +62,9 @@ class Dataset(DatasetMixin):
         if train:
             self.indices = all_indices[split:]
             train_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
-            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.config["batch_size"], sampler=train_sampler)
         else:
             self.indices = all_indices[:split]
             valid_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
-            self.dataset = torch.utils.data.DataLoader(self, batch_size=self.config["batch_size"], sampler=valid_sampler)
         self.actual_epoch = 0
 
     def __len__(self):
@@ -78,30 +83,48 @@ class Dataset(DatasetMixin):
         :return: Dictionary with the image at the key 'image'.
         :rtype: Dictionary
         """
-        example = {}
-        idx = self.indices[int(idx)]
-        # load a json file with all parameters which define the image 
+        
+        '''# load a json file with all parameters which define the image 
         if "request_parameters" in self.config and self.config["request_parameters"]:
             parameter_path = os.path.join(self.data_path, "parameters/parameters_index_" + str(idx) + ".json")
             with open(parameter_path) as f:
               parameters = json.load(f)
             example["parameters"] = parameters
-        # load an image of the pose if requested
-        if "request_pose" in self.config and self.config["request_pose"]:
-            image_pose_path = os.path.join(self.data_path, "images_poses/image_index_" + str(idx) + ".png")
-            # Load pose image
-            pose_image = Image.fromarray(io.imread(image_pose_path))
-            if self.transform:
-                pose_image = self.transform(pose_image)
-            example["pose"] = pose_image            
-        # Load image
+        '''
+        example = {}
+        idx = self.indices[int(idx)]
+        if "request_tri" in self.config and self.config["request_tri"]:
+            images = []
+            for i in range(3):
+                img = (self.load_image(idx = str(idx) + "_" + str(i)))
+                img = np.transpose(img, (1, 2, 0))
+                images.append(img)
+            example["appearance"] = images[0]
+            example["stickman"] = images[1]
+            example["target"] = images[2]
+        else:
+            if "request_parameters" in self.config and self.config["request_parameters"]:
+                parameters = self.load_parameters(idx)
+                example["parameters"] = parameters
+            # Load image
+            image = self.load_image(idx)
+            example["image"] = image
+        # Return example dictionary
+        return example
+
+    def load_parameters(self, idx):
+        # load a json file with all parameters which define the image 
+        parameter_path = os.path.join(self.data_path, "parameters/parameters_index_" + str(idx) + ".json")
+        with open(parameter_path) as f:
+            parameters = json.load(f)
+        return parameters
+            
+    def load_image(self, idx):
         image_path = os.path.join(self.data_path, "images/image_index_" + str(idx) + ".png")
         image = Image.fromarray(io.imread(image_path))
         if self.transform:
             image = self.transform(image)
-        example["image"] = image
-        # Return example dictionary
-        return example
+        return image
 
     def plot(self, image, name=None):
         if type(image)==dict:
@@ -131,9 +154,11 @@ class Dataset(DatasetMixin):
 class DatasetTrain(Dataset):
     def __init__(self, config):
         super().__init__(config, train=True)
-    
+    '''self.P = Dataset(config)
+        self.data = self.P.dataset
+    '''
 class DatasetEval(Dataset):
     def __init__(self, config):
         super().__init__(config, train=False)
-
+        #self.data = self.dataset
 #TODO save the random seed somewhere if not specified
