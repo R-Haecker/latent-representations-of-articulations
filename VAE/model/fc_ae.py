@@ -100,5 +100,3 @@ class decoder(nn.Module):
             x = self.Tanh((self.fc2(x)))
         x = torch.reshape(x, (self.config["batch_size"],3,self.config["image_resolution"][0],self.config["image_resolution"][1]))
         return x
-
-#TODO find out what has to be send to cudda to make i work

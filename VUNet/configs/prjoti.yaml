@@ -1,0 +1,4 @@
+data_root: /export/home/rhaecker/documents/dataset
+datasets:
+  train: VUNet.data.prjoti.Prjoti_VUNet_train
+  validation: VUNet.data.prjoti.Prjoti_VUNet_val
