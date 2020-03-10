@@ -1,6 +1,6 @@
 dataset: dataset.DatasetTrain
 validation_dataset: dataset.DatasetEval
-data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/ae_only_phi"
+data_root: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/ae_only_phi"
 validation_split: 0.1
 shuffle_dataset: True
 image_resolution: [64,64]
@@ -13,7 +13,7 @@ integrations:
     active: False
 
 iterator: iterator.Iterator
-model: conv_ae.Model
+model: vae.Model
 batch_size: 5
 num_epochs: 1
 

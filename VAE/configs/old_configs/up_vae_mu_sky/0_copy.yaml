@@ -1,6 +1,6 @@
 dataset: dataset.DatasetTrain
 validation_dataset: dataset.DatasetEval
-data_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/vae_var_some_sky"
+data_root: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/vae_var_some_sky"
 validation_split: 0.1
 shuffle_dataset: True
 image_resolution: [64,64]

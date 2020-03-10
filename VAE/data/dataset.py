@@ -24,11 +24,11 @@ class Dataset(DatasetMixin):
         self.logger = get_logger("Dataset")
         
         # Get the directory to the data and format it
-        assert "data_path" in config, "You have to specify the directory to the data in the config.yaml file."
-        self.data_path = config["data_path"]
-        if "~" in self.data_path:
-            self.data_path = os.path.expanduser('~') + self.data_path[self.data_path.find("~")+1:]
-        self.logger.debug("data_path: " + str(self.data_path))
+        assert "data_root" in config, "You have to specify the directory to the data in the config.yaml file."
+        self.data_root = config["data_root"]
+        if "~" in self.data_root:
+            self.data_root = os.path.expanduser('~') + self.data_root[self.data_root.find("~")+1:]
+        self.logger.debug("data_root: " + str(self.data_root))
         
         # Transforming and resizing images
         if "image_resolution" in config:    
@@ -45,12 +45,12 @@ class Dataset(DatasetMixin):
         #self.latent_dim = config["linear"]["latent_dim"]
         # Load every indices from all images
         if "request_tri" in self.config and self.config["request_tri"]:
-            every_indices = [int(s[12:-6]) for s in os.listdir(self.data_path + "/images/")]
+            every_indices = [int(s[12:-6]) for s in os.listdir(self.data_root + "/images/")]
             all_indices = []
             for i in range(int(np.floor(len(every_indices)/3))):
                 all_indices.append(every_indices[i*3])
         else:
-            all_indices = [int(s[12:-4]) for s in os.listdir(self.data_path + "/images/")]
+            all_indices = [int(s[12:-4]) for s in os.listdir(self.data_root + "/images/")]
         
         # Split data into validation and training data 
         split = int(np.floor(config["validation_split"] * len(all_indices)))
@@ -86,7 +86,7 @@ class Dataset(DatasetMixin):
         
         '''# load a json file with all parameters which define the image 
         if "request_parameters" in self.config and self.config["request_parameters"]:
-            parameter_path = os.path.join(self.data_path, "parameters/parameters_index_" + str(idx) + ".json")
+            parameter_path = os.path.join(self.data_root, "parameters/parameters_index_" + str(idx) + ".json")
             with open(parameter_path) as f:
               parameters = json.load(f)
             example["parameters"] = parameters
@@ -114,13 +114,13 @@ class Dataset(DatasetMixin):
 
     def load_parameters(self, idx):
         # load a json file with all parameters which define the image 
-        parameter_path = os.path.join(self.data_path, "parameters/parameters_index_" + str(idx) + ".json")
+        parameter_path = os.path.join(self.data_root, "parameters/parameters_index_" + str(idx) + ".json")
         with open(parameter_path) as f:
             parameters = json.load(f)
         return parameters
             
     def load_image(self, idx):
-        image_path = os.path.join(self.data_path, "images/image_index_" + str(idx) + ".png")
+        image_path = os.path.join(self.data_root, "images/image_index_" + str(idx) + ".png")
         image = Image.fromarray(io.imread(image_path))
         if self.transform:
             image = self.transform(image)
@@ -145,7 +145,7 @@ class Dataset(DatasetMixin):
                 plot_image = te
             plt.imshow(plot_image)
             if name!=None:
-                path_fig=self.data_path + "/figures/first_run_150e/"
+                path_fig=self.data_root + "/figures/first_run_150e/"
                 if not os.path.isdir(path_fig):
                     os.mkdir(path_fig)
                 #plt.savefig( path_fig + "figure_latent_dim_"+ str(self.latent_dim) +"_"+str(name)+".png")

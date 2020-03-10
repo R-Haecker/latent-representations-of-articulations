@@ -1,7 +1,6 @@
 data_root: /export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/three_var_some_fix_camera
-data_path: /export/home/rhaecker/documents/Machine-Learning-on-individual-data/data/three_var_some_fix_camera
-dataset: VUNet.data.cuboids_data.dataset.DatasetTrain
-validation_dataset: VUNet.data.cuboids_data.dataset.DatasetEval
+dataset: VAE.data.dataset.DatasetTrain
+validation_dataset: VAE.data.dataset.DatasetEval
 request_parameters: False
 request_pose: False
 request_tri: True
