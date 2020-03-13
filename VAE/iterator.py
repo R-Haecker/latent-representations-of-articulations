@@ -26,7 +26,7 @@ class Iterator(TemplateIterator):
         self.config = config
         self.logger = get_logger("Iterator")
         # Test the config for the iterator
-        self.check_config(config)
+        self.test_config(config)
         # Log the architecture of the model
         self.logger.debug(f"{model}")
         # Move mode to device cuda if available
@@ -45,7 +45,7 @@ class Iterator(TemplateIterator):
             self.sigmoid_x_offset = self.offset_requlator()
 
     
-    def check_config(self, config):
+    def test_config(self, config):
         '''Test the config if it will work with the iterator.''' 
         assert "loss_function" in config, "The config must contain and define a Loss function. possibilities:{'L1','L2'or'MSE','KL'or'KLD'}."
         assert "learning_rate" in config, "The config must contain and define a the learning rate."

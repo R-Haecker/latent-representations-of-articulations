@@ -35,7 +35,7 @@ variational:
 
 # Conv parameters
 conv:
-  amount_conv_blocks: 3
+  n_blocks: 3
   kernel_size: 1
   stride: 1
   conv_channels:

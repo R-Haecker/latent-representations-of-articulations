@@ -35,7 +35,7 @@ variational:
     amplitude: 0.001
 # Conv parameters
 conv:
-  amount_conv_blocks: 4
+  n_blocks: 4
   kernel_size: 2
   stride: 2
   conv_channels:

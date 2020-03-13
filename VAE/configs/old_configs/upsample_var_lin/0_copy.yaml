@@ -31,7 +31,7 @@ weight_decay: 0.00001
 
 # Conv parameters
 conv:
-  amount_conv_blocks: 2
+  n_blocks: 2
   kernel_size: 3
   stride: 1
   conv_channels:

@@ -20,7 +20,7 @@ num_epochs: 100
 explanation: "Short test for convolution size of kernel and stride"
 # Conv parameters
 conv:
-  amount_conv_blocks: 2
+  n_blocks: 2
   kernel_size: 3
   stride: 2
   conv_channels:

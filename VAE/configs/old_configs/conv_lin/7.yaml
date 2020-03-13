@@ -21,7 +21,7 @@ explanation: "Convolution and linear test size of kernel and stride"
 
 # Conv parameters
 conv:
-  amount_conv_blocks: 2
+  n_blocks: 2
   kernel_size: 6
   stride: 3
   conv_channels:

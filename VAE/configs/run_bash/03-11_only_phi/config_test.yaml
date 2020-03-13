@@ -3,17 +3,16 @@ code_root: null
 integrations:
   wandb:
     active: False
-    #project: "Richis cool deep learning project!"
-# CUDA_VISIBLE_DEVICES: "7"
-
-explanation: "Test only for debugging."
+#CUDA_VISIBLE_DEVICES: "7"
+#explanation: "03.11 VAE whole only phi only conv."
+explanation: "Test debug"
 debug_log_level: True
 
 # Dataset info
 datasets:
   train: data.dataset.DatasetTrain
   validation: data.dataset.DatasetEval
-data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/only_dir_light_some_camera_theta
+data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/ae_only_phi
 
 request_parameters: False
 request_pose: False
@@ -37,29 +36,25 @@ track_loss: "L1"
 learning_rate: 0.0001
 weight_decay: 0.00001 
 #log_freq: 2000
-  
-upsample: 'nearest'
-conv_after_upsample: True
-#'linear', 'nearest', 'bicubic'
 
+variational:
+  sigma: False
+  sigmoid_regulator:
+    start_amplitude: 1.E-5
+    start_step: 60000
+    width: 500
+    amplitude: 0.001
 linear:
-  latent_dim: 64
-  variational:
-    sigma: False
-    sigmoid_regulator:
-      start_amplitude: 1.E-5
-      start_step: 60000
-      width: 500
-      amplitude: 0.001
+  latent_dim: 16
 
 # Conv parameters
 conv:
-  #n_blocks: 3
+  n_blocks: 4
   kernel_size: 3
-  stride: 1
+  stride: 2
+  conv_channels:
+    [3,32,32,64,64]
   #padding: 2
-  #conv_channels:
-  #  [3,32,32,64]
-  n_channel_start: 32
-  n_channel_max: 256
-  final_layer: True
+
+#upsample: 'nearest'
+#'linear', 'nearest', 'bicubic'

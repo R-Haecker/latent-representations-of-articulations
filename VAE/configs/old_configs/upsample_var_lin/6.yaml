@@ -31,7 +31,7 @@ explanation: "Convolutional (same spacial size) and up/downsample with linear la
 
 # Conv parameters
 conv:
-  amount_conv_blocks: 2
+  n_blocks: 2
   kernel_size: 3
   stride: 1
   conv_channels:
