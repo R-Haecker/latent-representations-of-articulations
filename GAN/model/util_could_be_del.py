@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-def get_tensor_shapes(config, encoder = True):
+def get_tensor_shapes(config):
     """This function calculates the shape of a every tensor after an operation in the VAE_Model.        
     :return: A list of the shape of an tensors after every module.
     :rtype: List
@@ -11,7 +11,6 @@ def get_tensor_shapes(config, encoder = True):
     # The first shape is specified in the config
     tensor_shapes.append([3, config["image_resolution"][0],config["image_resolution"][1]])
     # calculate the shape after a convolutuonal operation
-    '''
     if ([ config["conv"]["kernel_size"], config["conv"]["stride"] ] in [[4,3],[6,3]] or ("upsample" in config and [ config["conv"]["kernel_size"], config["conv"]["stride"] ] in [[2,2],[3,3],[4,4]])):
         # these cases just have one less spacial dimension in the last iteration...  
         for i in range(config["conv"]["n_blocks"]): 
@@ -24,26 +23,21 @@ def get_tensor_shapes(config, encoder = True):
                 spacial_res = int(spacial_res - 1 )
             tensor_shapes.append([config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])    
     else:
-    '''
-    # normal formular to compute the tensor shapes     
-    for i in range(config["conv"]["n_blocks"]): 
-        # calculate the spacial resolution after the formular given from pytorch
-        spacial_res = (int((tensor_shapes[i][-1] + 2 * config["conv"]["padding"] - config["conv"]["kernel_size"] - 2)
-                    /config["conv"]["stride"] + 1) + 1)
-        if "upsample" in config:
-            spacial_res = int(np.floor(spacial_res/2) +1) 
-        if encoder and i == config["conv"]["n_blocks"]-1 and not "linear" in config and "variational" in config and "sigma" in config["variational"] and config["variational"]["sigma"]:
-            tensor_shapes.append([config["conv"]["conv_channels"][i+1] * 2, spacial_res, spacial_res])
-        else:
+        # normal formular to compute the tensor shapes     
+        for i in range(config["conv"]["n_blocks"]): 
+            # calculate the spacial resolution after the formular given from pytorch
+            spacial_res = (int((tensor_shapes[i][-1] + 2 * config["conv"]["padding"] - config["conv"]["kernel_size"] - 2)
+                        /config["conv"]["stride"] + 1) + 1)
+            if "upsample" in config:
+                spacial_res = int(np.floor(spacial_res/2) +1) 
             tensor_shapes.append([config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])
-                
+    
     # add the shape of the flatten image if a fc linaer layer is available
-    if "variational" in config or "linear" in config:
-        flatten_rep = tensor_shapes[config["conv"]["n_blocks"]][1] * tensor_shapes[config["conv"]["n_blocks"]][2] * tensor_shapes[config["conv"]["n_blocks"]][0] #config["conv"]["conv_channels"][config["conv"]["n_blocks"]]
-        tensor_shapes.append([flatten_rep])
-        if "linear" in config:
+    if "linear" in config:
+        if "latent_dim" in config["linear"]:
+            flatten_rep = tensor_shapes[config["conv"]["n_blocks"]][1] * tensor_shapes[config["conv"]["n_blocks"]][2] * config["conv"]["conv_channels"][config["conv"]["n_blocks"]]
+            tensor_shapes.append([flatten_rep])
             tensor_shapes.append([config["linear"]["latent_dim"]])
-
     return tensor_shapes
 
 def test_config(config):
@@ -80,9 +74,6 @@ def complete_config(config, logger):
             logger.info("In config the first conv chanlles should always be three. It is now added.")
     else:
         if "conv_channels" in config["conv"]:
-            if not config["conv"]["conv_channels"][0] == 3:
-                config["conv"]["conv_channels"].insert(0, 3)
-                logger.info("In config the first conv chanlles should always be three. It is now added.")
             # n_blocks is specified with the length of the conv_channels list
             config["conv"]["n_blocks"] = len(config["conv"]["conv_channels"]) - 1
         else:

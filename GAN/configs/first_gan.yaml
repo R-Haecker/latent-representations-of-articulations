@@ -1,0 +1,50 @@
+# info for run
+code_root: null
+integrations:
+  wandb:
+    active: True
+    project: "GAN"
+
+# Dataset info
+datasets:
+  train: data.dataset.DatasetTrain
+  validation: data.dataset.DatasetEval
+data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/only_dir_light_some_camera_theta
+
+request_parameters: False
+request_pose: False
+request_tri: False
+validation_split: 0.1
+shuffle_dataset: True
+image_resolution: 64
+
+# Meta Info
+explanation: "First GAN."
+debug_log_level: False
+CUDA_VISIBLE_DEVICES: 2
+
+# Iterator info
+iterator: iterator.iterator.Iterator
+model: model.gan.GAN
+batch_size: 10
+num_epochs: 150
+
+# Model info
+
+# Generator
+# Number of channels in the training images. For color images this is 3
+nc: 3
+# Size of z latent vector (i.e. size of generator input)
+nz: 256
+# Size of feature maps in generator
+ngf: 64
+# Size of feature maps in discriminator
+ndf: 64
+# Beta1 hyperparam for Adam optimizers
+beta1: 0.5
+
+activation_function: "ReLU"
+learning_rate: 0.0002
+beta1: 0.5
+weight_decay: 0.000001 
+#log_freq: 2000

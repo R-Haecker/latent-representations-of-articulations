@@ -10,9 +10,9 @@ import numpy as np
 
 from model.util import (
     get_tensor_shapes,
-    test_config_model,
     complete_config,
     get_act_func,
+    test_config
 )
 from model.modules import (
     NormConv2d,
@@ -29,21 +29,35 @@ class VAE_Model(nn.Module):
         # get logger and config
         self.logger = get_logger("VAE_Model")
         # Test the config
-        test_config_model(config)
+        test_config(config)
         self.config = complete_config(config, self.logger)
-        
         # calculate the tensor shapes throughout the network
         self.tensor_shapes = get_tensor_shapes(config)
+        self.tensor_shapes_dec = get_tensor_shapes(config, encoder = False)
         self.logger.info(str(self.tensor_shapes))
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # extract information from config
+        self.linear      = bool("linear" in self.config)
+        self.variational = bool("variational" in self.config) 
+        self.sigma       = bool(self.variational and "sigma" in self.config["variational"] and self.config["variational"]["sigma"])
+        if self.linear or self.variational:
+            if self.sigma:
+                self.latent_dim = int(self.tensor_shapes[-1][-1]/2)
+                self.logger.debug("decoder shapes: " + str(self.tensor_shapes_dec))
+                #self.tensor_shapes_dec[-1][-1] = self.latent_dim
+                #self.tensor_shapes_dec[-2][0]  = self.latent_dim
+                #print("decoder shapes:",self.tensor_shapes_dec)
+            else:
+                self.latent_dim = self.tensor_shapes[-1][-1]
+        else:
+            self.latent_dim = None
         # get the activation function
         self.act_func = get_act_func(config, self.logger)
-        self.conv = NormConv2d
         # craete encoder and decoder
-        self.enc = VAE_Model_Encoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes, conv = self.conv, latent_dim = self.config["linear"]["latent_dim"], sigma = bool("variational" in self.config["linear"] and "sigma" in self.config["linear"]["variational"] and self.config["linear"]["variational"]["sigma"]) )
-        self.dec = VAE_Model_Decoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes, conv = self.conv, latent_dim = self.config["linear"]["latent_dim"], sigma = bool("variational" in self.config["linear"] and "sigma" in self.config["linear"]["variational"] and self.config["linear"]["variational"]["sigma"]) )
+        self.enc = VAE_Model_Encoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes,     linear = self.linear, variaional = self.variational, sigma = self.sigma, latent_dim = self.latent_dim)
+        self.dec = VAE_Model_Decoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes_dec, linear = self.linear, variaional = self.variational, sigma = self.sigma, latent_dim = self.latent_dim)
     
-    
-    def latent_sample(self, mu, sig = 1):
+    def latent_sample(self, mu, var = 1, batch_size = None):
         """Sample in the latent space. Input a gaussian distribution to retrive an image from the decoder.
         
         :param mu: The expected value of the gaussian distribution. For only one vaule you can specify a float. For interesting sampling should be a Tensor with dimension same as latent dimension.
@@ -53,16 +67,35 @@ class VAE_Model(nn.Module):
         :return: Retruns an image according to the sample.
         :rtype: Tensor
         """        
-        assert "variational" in self.config["linear"], "If you want to sample from a gaussian distribution to create images you need the key 'variational' in the config."
+        assert "variational" in self.config, "If you want to sample from a gaussian distribution to create images you need the key 'variational' in the config."
+        if batch_size == None:
+            batch_size = self.config["batch_size"]
         if type(mu) in [int,float]:
-            mu = torch.ones([self.config["linear"]["latent_dim"]]) * mu
-            sig = torch.ones([self.config["linear"]["latent_dim"]]) * sig
-        if "sigma" in self.config["linear"]["variational"] and self.config["linear"]["variational"]["sigma"]: 
-            x = [mu, sigma]
+            mu  = torch.ones([batch_size, self.latent_dim]) * mu
+            var = torch.ones([batch_size, self.latent_dim]) * var
         else:
-            x = mu
-        
-        x = self.dec(x)
+            assert mu.shape[-1] == self.latent_dim, "Wrong shape for latent vector mu"
+        norm_dist = torch.distributions.normal.Normal(torch.zeros([batch_size, self.latent_dim]), torch.ones([batch_size, self.latent_dim]))
+        eps = norm_dist.sample()
+        z = mu + var * eps
+        z = z.to(self.device)
+        x = self.dec(z)
+        return x
+
+    def bottleneck(self, x):
+        if self.variational:
+            norm_dist = torch.distributions.normal.Normal(torch.zeros([x.shape[0], self.latent_dim]), torch.ones([x.shape[0], self.latent_dim]))
+            eps = norm_dist.sample().to(self.device)
+            if self.sigma:
+                self.mu  = x[:, :self.latent_dim]
+                self.var = torch.abs(x[:, self.latent_dim:]) + 0.0001
+            else:
+                self.mu  = x
+                self.var = 1
+            # final latent representatione
+            self.logger.debug("varitaional mu.shape: " + str(self.mu.shape))
+            self.logger.debug("varitaional var.shape: " + str(self.var.shape))
+            x = self.mu + self.var * eps
         return x
         
     def forward(self, x):
@@ -73,13 +106,14 @@ class VAE_Model(nn.Module):
         :return: Image generated from the latent representation. 
         :rtype: Tensor
         """        
-        z = self.enc(x)
-        self.logger.debug("encoder output: " + str(z.shape))
-        x = self.dec(z)
-        self.z = self.dec.z
+        x = self.enc(x)
+        self.z = self.bottleneck(x)
+        self.logger.debug("output: " + str(self.z.shape))
+            
+        x = self.dec(self.z)
         self.logger.debug("decoder output: " + str(x.shape))
         #print("decoder output: " + str(x.shape))
-        return x 
+        return x
 
 class VAE_Model_Encoder(nn.Module):
     """This is the encoder for the VAE model."""    
@@ -88,18 +122,23 @@ class VAE_Model_Encoder(nn.Module):
         config, 
         act_func, 
         tensor_shapes,
-        conv = NormConv2d,
-        latent_dim = None,
-        sigma = None
+        conv       = NormConv2d,
+        linear     = None, 
+        variaional = None, 
+        sigma      = None, 
+        latent_dim = None
     ):
         super(VAE_Model_Encoder,self).__init__()
         self.logger = get_logger("VAE_Model_Encoder")
         # save all required parameters
         self.config = config 
         self.act_func = act_func
-        self.latent_dim = latent_dim
-        self.sigma = sigma
         self.tensor_shapes = tensor_shapes
+        self.conv       = conv
+        self.linear     = linear 
+        self.variaional = variaional 
+        self.sigma      = sigma
+        self.latent_dim = latent_dim
         
         self.setup_modules()
         '''
@@ -114,8 +153,13 @@ class VAE_Model_Encoder(nn.Module):
         # Create the convolutional blocks specified in the config.
         conv_modules_list = []
         for i in range(self.config["conv"]["n_blocks"]):
-            conv_modules_list.append(
-                Downsample(channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i+1], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = NormConv2d) 
+            if "batch_norm" in self.config and self.config["batch_norm"]:
+                conv_modules_list.append(
+                Downsample(channels = self.tensor_shapes[i][0], out_channels = self.tensor_shapes[i+1][0], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = self.conv, batch_norm = True) 
+                )    
+            else:
+                conv_modules_list.append(
+                Downsample(channels = self.tensor_shapes[i][0], out_channels = self.tensor_shapes[i+1][0], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = self.conv) 
                 )
             conv_modules_list.append(self.act_func)
             if "upsample" in self.config:
@@ -123,28 +167,32 @@ class VAE_Model_Encoder(nn.Module):
         self.conv_seq = nn.Sequential(*conv_modules_list)
         
         # Add if specified a fully connected layer after the convolutions
-        if self.latent_dim != None:
-            self.lin_layer = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0], out_features = self.latent_dim)
-            # if sigma in the config is true we want to encode a standard deviation too 
+        if self.linear:
+            #self.lin_layer = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0], out_features = self.latent_dim)
             if self.sigma:
-                self.lin_sig = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0], out_features = self.latent_dim)    
+                self.lin_layer = nn.Linear(in_features = self.tensor_shapes[-2][-1], out_features = self.latent_dim * 2)
+            else:
+                self.lin_layer = nn.Linear(in_features = self.tensor_shapes[-2][-1], out_features = self.latent_dim)
+            # if sigma in the config is true we want to encode a standard deviation too 
+            #if self.sigma:
+            #    self.lin_sig = nn.Linear(in_features = self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0], out_features = self.latent_dim)    
         
     def forward(self, x):
         # Apply all modules in the seqence
         x = self.conv_seq(x)
         self.logger.debug("after all conv blocks x.shape: " + str(x.shape))
-        if self.latent_dim != None:
+        if self.variaional:
             self.logger.debug("Shape is x.shape: " + str(x.shape))
+            self.logger.debug("tensor Shapes : " + str(self.tensor_shapes))
+            self.logger.debug("tensor Shape : [" + str(self.tensor_shapes[self.config["conv"]["n_blocks"] + 1]) + "]")
             self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0]) + "]")
             x = x.view(-1, self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0])
             self.logger.debug("Shape is x.shape: " + str(x.shape))            
-            if self.sigma:
+            if self.linear and self.sigma:
                 # maybe absolut value of sigma act ReLu
-                x = [self.lin_layer(x), torch.abs(self.lin_sig(x))]
-            else:
                 x = self.lin_layer(x)
-                if "variational" in self.config["linear"]:
-                    x = self.act_func(x)    
+        #if [x.shape[-2],x.shape[-1]] == [1,1]:
+        #    x = x.view(-1,x.shape[1])    
         return x
     
 class VAE_Model_Decoder(nn.Module):
@@ -153,22 +201,25 @@ class VAE_Model_Decoder(nn.Module):
         config, 
         act_func, 
         tensor_shapes,
-        sigma,
-        latent_dim = None,
-        conv = NormConv2d
+        conv = NormConv2d,
+        linear     = None,
+        variaional = None,
+        sigma      = None,
+        latent_dim = None
     ):
         super(VAE_Model_Decoder,self).__init__()
         self.logger = get_logger("VAE_Model_Decoder")
         # save all required parameters
         self.config = config
         self.act_func = act_func
-        self.conv = conv
-        self.latent_dim = latent_dim
-        self.sigma = sigma
         self.tensor_shapes = tensor_shapes
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        if self.latent_dim != None:
+        self.conv       = conv
+        self.linear     = linear
+        self.variaional = variaional
+        self.sigma      = sigma
+        self.latent_dim = latent_dim
+        
+        if self.linear:
             self.lin_layer = nn.Linear(in_features = self.latent_dim, out_features = self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0])
         
         self.conv_seq = self.get_blocks()
@@ -180,12 +231,17 @@ class VAE_Model_Decoder(nn.Module):
     def get_blocks(self):
         upsample_modules_list = []
         for i in range(self.config["conv"]["n_blocks"], 0, -1):
+            '''
             if "upsample" in self.config:
                 if "conv_after_upsample" in self.config and self.config["conv_after_upsample"]:
                     # TODO this has to be fixed somehow
                     print("channels:",self.config["conv"]["conv_channels"][i], "  spacial_size to upsample to:",self.tensor_shapes[i-1][1:])
                     upsample_modules_list.append(self.conv(in_channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i-1], kernel_size=3, stride=1, padding=1))
-                upsample_modules_list.append(nn.Upsample(size = self.tensor_shapes[i-1][1:], mode = self.config["upsample"]))
+                upsample_modules_list.append(nn.Upsample(size = self.tensor_shapes[i-1][1:], mode = self.config["upsample"], conv_layer = self.conv))
+            else:
+            '''
+            if "batch_norm" in self.config and self.config["batch_norm"] and i != 1:
+                upsample_modules_list.append(Upsample(in_channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i-1], conv_layer = self.conv, batch_norm = True))
             else:
                 upsample_modules_list.append(Upsample(in_channels = self.config["conv"]["conv_channels"][i], out_channels = self.config["conv"]["conv_channels"][i-1], conv_layer = self.conv))
             if i != 1:
@@ -195,6 +251,14 @@ class VAE_Model_Decoder(nn.Module):
                     upsample_modules_list.append(self.conv(self.config["conv"]["conv_channels"][0], self.config["conv"]["conv_channels"][0], kernel_size=1))
                 upsample_modules_list.append(nn.Tanh())
         return nn.Sequential(*upsample_modules_list)
+
+    def forward(self, x):
+        if self.linear:
+            x = self.act_func(self.lin_layer(x))
+        if self.variaional or self.linear:
+            x = x.reshape(-1,*self.tensor_shapes[self.config["conv"]["n_blocks"]])
+        x = self.conv_seq(x)
+        return x
 
     def old_get_blocks(self):
         # Get convolutional block with fitting spacial size
@@ -242,24 +306,6 @@ class VAE_Model_Decoder(nn.Module):
         
         return nn.Sequential(*convT_modules_list)    
 
-    def forward(self, x):
-        if self.latent_dim != None:
-            if "variational" in self.config["linear"]:
-                norm_dist = torch.distributions.normal.Normal(torch.zeros([self.latent_dim]), torch.ones([self.latent_dim]))
-                eps = norm_dist.sample().to(self.device)
-                var = 1
-                if self.sigma:
-                    x = x[0]
-                    var = x[1]
-                x = x + var * eps
-            self.z = x
-            x = self.act_func(self.lin_layer(x))
-            x = x.reshape(-1,*self.tensor_shapes[self.config["conv"]["n_blocks"]])
-        else:
-            self.z = x
-        print("actual shape:", x.shape)
-        x = self.conv_seq(x)
-        return x
 
 #TODO log the spacial sizes everywhere in wandb
 #TODO get kl loss after a model is trained for a while
