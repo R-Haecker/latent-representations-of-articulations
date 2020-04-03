@@ -8,6 +8,8 @@ def get_loss_funct(loss_function):
         return nn.L1Loss()
     if loss_function == "L2" or loss_function == "MSE":
         return nn.MSELoss()
+    if loss_function == "BCE":
+        return nn.BCELoss()
 
 # These two function are copied from the VUNet repository: https://github.com/jhaux/VUNet.git
 def np2pt(array, permute = True):

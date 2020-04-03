@@ -3,7 +3,7 @@ code_root: null
 integrations:
   wandb:
     active: True
-    project: "Debug!"
+    project: "GAN"
 
 # Dataset info
 datasets:
@@ -19,22 +19,20 @@ shuffle_dataset: True
 image_resolution: 64
 
 # Meta Info
-#explanation: "GAN with VAE var reconstruction weight."
-debug_log_level: True
+explanation: "GAN with VAE and sampled images."
+debug_log_level: False
 CUDA_VISIBLE_DEVICES: 5
 
 # Iterator info
 iterator: iterator.iterator.Iterator
 model: model.gan.GAN
 batch_size: 10
-num_epochs: 1
+num_epochs: 125
 random_seed: 13831
 
-optimization: #to implement
+optimization:
   latent_sample: True
-  update: "both" # "one" "one_prob"
-  factor_disc_lr: 2
-
+  
 losses:
   discriminator_loss: "BCE" # "L2" "BCE"
   reconstruction_loss: "L2"
@@ -46,7 +44,7 @@ losses:
     amplitude: 0.0001
 
 # Generator
-learning_rate: 0.0001
+learning_rate: 0.0002
 beta1: 0.5
 weight_decay: 0.000001 
 #log_freq: 2000

@@ -10,7 +10,8 @@ import torch
 import torch.nn as nn
 import sys
 sys.path.append('../')
-from model.vae import VAE_Model
+from model.gan import GAN
+#VAE_Model
 
 
 def callback_latent(root, data_in, data_out, config):
@@ -48,7 +49,7 @@ def callback_latent(root, data_in, data_out, config):
     # calculate the eigenvetors and eigenvalues
     data_out.show()
     latents = data_out.labels["latent_rep"]
-    if
+
     eig_val, eig_vec = np.linalg.eig(latents.transpose()@latents)
     argsort_eig_val = np.argsort(eig_val)
     # sort the eigenvectors according to their eigen values
@@ -63,18 +64,20 @@ def callback_latent(root, data_in, data_out, config):
     eig_val = pc_val_sorted
     
     # load Model with latest checkpoint
-    vae = VAE_Model(config)
+    gan = GAN(config)
     latest_chkpt_path = get_latest_checkpoint(checkpoint_root = checkpoint_path)
-    vae.load_state_dict(torch.load(latest_chkpt_path)["model"])
+    gan.load_state_dict(torch.load(latest_chkpt_path)["model"])
+    vae = gan.generator
     vae = vae.to(device)
     
     # looking at the latent representation
+    delta_ = 1
     plot_eig_val(eig_val = eig_val, figures_path=figures_path, save=True)
-    view_pc(model=vae, eig_vec=eig_vec, mu=0, delta=60,num_pc=10, num_images=9,save=True, figures_path = figures_path, config = config)
-    save_image_seq(model = vae, config = config, eig_vec = eig_vec, gif_path = gif_path, mu = 0, delta=60, pc_num=np.arange(0,8,1), numb_images=100, loop_gif=True)
+    view_pc(model=vae, eig_vec=eig_vec, mu=0, delta=delta_,num_pc=10, num_images=9,save=True, figures_path = figures_path, config = config)
+    save_image_seq(model = vae, config = config, eig_vec = eig_vec, gif_path = gif_path, mu = 0, delta=delta_, pc_num=np.arange(0,8,1), numb_images=1000, loop_gif=True)
     pc_start = [0,2,4,6]
     for i in range(len(pc_start)):
-        view_two_added_pc(model=vae, eig_vec=eig_vec, run_name=run_name, config = config, mu = 0, delta = 50, pc_num_start=pc_start[i], num_images_x=8, num_images_y=8, save=True, figures_path=figures_path)
+        view_two_added_pc(model=vae, eig_vec=eig_vec, run_name=run_name, config = config, mu = 0, delta = delta_, pc_num_start=pc_start[i], num_images_x=8, num_images_y=8, save=True, figures_path=figures_path)
 
 def plot_eig_val(eig_val, figures_path, save):
     '''Save a plot with the eigenvalues.'''
@@ -91,13 +94,19 @@ def plot_eig_val(eig_val, figures_path, save):
 
 def get_one_pc(model, eig_vec, config, mu = 0, delta=40, pc_num=0, num_images=8):
     '''Create images for one principle component in the range mu-delta to mu+delta and return them.'''
+    # move model to gpu if possible
+    device = "cuda" #torch.device("cuda" if torch.cuda.is_available() else "cpu")
     x = torch.linspace(mu-delta,mu+delta,num_images).to(device)
     pc = torch.from_numpy(eig_vec[pc_num]).to(device)
-
-    z = torch.zeros([num_images,config["linear"]["latent_dim"]], dtype=torch.float).to(device)
+    if "linear" in config:
+        latent_dim = config["linear"]["latent_dim"]
+    else:
+        latent_dim = config["conv"]["n_channel_max"]
+    z = torch.zeros([num_images, latent_dim], dtype=torch.float).to(device)
     for i in range(num_images):
         z[i] = pc * x[i]
-    img = model.latent_sample(z)
+    z = z.to(device)
+    img = model.latent_sample(z, batch_size = num_images)
     img = img.detach().cpu().permute([0,2,3,1]).numpy()
     img = (img + 1)/2
     final = np.hstack(img)
@@ -130,6 +139,8 @@ def view_pc(model, eig_vec, config, mu=0, delta=20, num_pc=1, num_images=5, save
     
 def view_two_added_pc(model, eig_vec, run_name, config, mu = 0, delta = 20, pc_num_start=0, num_images_x=5, num_images_y=5, save=False, figures_path=None):
     '''Create a big plot with two pcs along one axis each which are added in between and save the plot.'''
+    # move model to gpu if possible
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if type(mu) not in [list,np.ndarray]:
         mu = [mu, mu]
         delta = [delta, delta]
@@ -139,12 +150,16 @@ def view_two_added_pc(model, eig_vec, run_name, config, mu = 0, delta = 20, pc_n
     pc1 = torch.from_numpy(eig_vec[pc_num_start]).to(device)
     pc2 = torch.from_numpy(eig_vec[pc_num_start+1]).to(device)
     
-    z = torch.zeros([num_images_x,config["linear"]["latent_dim"]], dtype=torch.float).to(device)
+    if "linear" in config:
+        latent_dim = config["linear"]["latent_dim"]
+    else:
+        latent_dim = config["conv"]["n_channel_max"]
+    z = torch.zeros([num_images_x, latent_dim], dtype=torch.float).to(device)
     h_final = []
     for j in range(num_images_y):
         for i in range(num_images_x):
             z[i] = pc1 * x1[i] + pc2 * x2[j]
-        img = model.latent_sample(z)
+        img = model.latent_sample(z, batch_size = num_images_x)
         img = img.detach().cpu().permute([0,2,3,1]).numpy()
         img = (img + 1)/2
         h_final.append(np.hstack(img))
@@ -186,14 +201,20 @@ def save_image_seq(model, config, eig_vec, gif_path, mu = 0, delta=50, pc_num=0,
 
 def create_image_seq(model, config, eig_vec, mu = 0, delta=50, pc_num=0, numb_images=250, loop_gif=False):
     '''Create a given amount of images for a pc in a certain range and return the images'''
+    # move model to gpu if possible
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     xx = torch.linspace(mu-delta,mu+delta,numb_images).to(device)
     pc = torch.from_numpy(eig_vec[pc_num]).to(device).double()
     
     all_images = []
-    z = torch.zeros([numb_images,config["linear"]["latent_dim"]], dtype=torch.float).to(device)
+    if "linear" in config:
+        latent_dim = config["linear"]["latent_dim"]
+    else:
+        latent_dim = config["conv"]["n_channel_max"]
+    z = torch.zeros([numb_images, latent_dim], dtype=torch.float).to(device)
     for i in range(numb_images):
         z[i] = pc * xx[i]
-    img = model.latent_sample(z)
+    img = model.latent_sample(z, batch_size = numb_images)
     img = img.detach().cpu().permute([0,2,3,1]).numpy()
     img = (img + 1)/2
     img = img_as_ubyte(img)
@@ -203,3 +224,5 @@ def create_image_seq(model, config, eig_vec, mu = 0, delta=50, pc_num=0, numb_im
         for i in range(numb_images):
             all_images.append(img[-i-1])
     return all_images
+
+# TODO implement sigma sampling

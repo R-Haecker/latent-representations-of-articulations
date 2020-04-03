@@ -12,7 +12,8 @@ from model.util import (
     get_tensor_shapes,
     complete_config,
     get_act_func,
-    test_config
+    test_config,
+    set_random_state
 )
 from model.modules import (
     NormConv2d,
@@ -31,6 +32,7 @@ class VAE_Model(nn.Module):
         # Test the config
         test_config(config)
         self.config = complete_config(config, self.logger)
+        set_random_state(self.config)
         # calculate the tensor shapes throughout the network
         self.tensor_shapes = get_tensor_shapes(config)
         self.tensor_shapes_dec = get_tensor_shapes(config, encoder = False)
@@ -44,9 +46,6 @@ class VAE_Model(nn.Module):
             if self.sigma:
                 self.latent_dim = int(self.tensor_shapes[-1][-1]/2)
                 self.logger.debug("decoder shapes: " + str(self.tensor_shapes_dec))
-                #self.tensor_shapes_dec[-1][-1] = self.latent_dim
-                #self.tensor_shapes_dec[-2][0]  = self.latent_dim
-                #print("decoder shapes:",self.tensor_shapes_dec)
             else:
                 self.latent_dim = self.tensor_shapes[-1][-1]
         else:
@@ -71,12 +70,17 @@ class VAE_Model(nn.Module):
         if batch_size == None:
             batch_size = self.config["batch_size"]
         if type(mu) in [int,float]:
-            mu  = torch.ones([batch_size, self.latent_dim]) * mu
-            var = torch.ones([batch_size, self.latent_dim]) * var
+            mu  = torch.ones([batch_size, self.latent_dim]).to(self.device) * mu
+            var = torch.ones([batch_size, self.latent_dim]).to(self.device) * var
         else:
             assert mu.shape[-1] == self.latent_dim, "Wrong shape for latent vector mu"
+        if "sigma" not in self.config["variational"] or not self.config["variational"]["sigma"]:
+            if var != 1:
+                self.logger.info("Variational: sigma is false, var will be overwritten and set to one")
+                var = 1
         norm_dist = torch.distributions.normal.Normal(torch.zeros([batch_size, self.latent_dim]), torch.ones([batch_size, self.latent_dim]))
         eps = norm_dist.sample()
+        eps = eps.to(self.device)
         z = mu + var * eps
         z = z.to(self.device)
         x = self.dec(z)
@@ -152,15 +156,16 @@ class VAE_Model_Encoder(nn.Module):
     def setup_modules(self):
         # Create the convolutional blocks specified in the config.
         conv_modules_list = []
-        for i in range(self.config["conv"]["n_blocks"]):
-            if "batch_norm" in self.config and self.config["batch_norm"]:
-                conv_modules_list.append(
-                Downsample(channels = self.tensor_shapes[i][0], out_channels = self.tensor_shapes[i+1][0], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = self.conv, batch_norm = True) 
-                )    
-            else:
-                conv_modules_list.append(
-                Downsample(channels = self.tensor_shapes[i][0], out_channels = self.tensor_shapes[i+1][0], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = self.conv) 
-                )
+        if "first_layer" in self.config["conv"] and self.config["conv"]["first_layer"]:
+            conv_modules_list.append(self.conv(in_channels = self.tensor_shapes[0][0], out_channels = self.tensor_shapes[1][0], kernel_size = 3, stride = 1, padding = 1) )
+            range_ = [1, self.config["conv"]["n_blocks"] + 1]
+        else:
+            range_ = [0, self.config["conv"]["n_blocks"]]
+        for i in range(*range_):
+            batch_norm = True if "batch_norm" in self.config and self.config["batch_norm"] else False
+            conv_modules_list.append(
+            Downsample(channels = self.tensor_shapes[i][0], out_channels = self.tensor_shapes[i+1][0], kernel_size = self.config["conv"]["kernel_size"], stride = self.config["conv"]["stride"], padding = self.config["conv"]["padding"], conv_layer = self.conv, batch_norm = batch_norm) 
+            )    
             conv_modules_list.append(self.act_func)
             if "upsample" in self.config:
                 conv_modules_list.append(nn.MaxPool2d(2, stride=2))
@@ -184,9 +189,8 @@ class VAE_Model_Encoder(nn.Module):
         if self.variaional:
             self.logger.debug("Shape is x.shape: " + str(x.shape))
             self.logger.debug("tensor Shapes : " + str(self.tensor_shapes))
-            self.logger.debug("tensor Shape : [" + str(self.tensor_shapes[self.config["conv"]["n_blocks"] + 1]) + "]")
-            self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0]) + "]")
-            x = x.view(-1, self.tensor_shapes[self.config["conv"]["n_blocks"] + 1][0])
+            self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[-1][0]) + "]")
+            x = x.view(-1, self.tensor_shapes[-1][0])
             self.logger.debug("Shape is x.shape: " + str(x.shape))            
             if self.linear and self.sigma:
                 # maybe absolut value of sigma act ReLu
@@ -256,7 +260,7 @@ class VAE_Model_Decoder(nn.Module):
         if self.linear:
             x = self.act_func(self.lin_layer(x))
         if self.variaional or self.linear:
-            x = x.reshape(-1,*self.tensor_shapes[self.config["conv"]["n_blocks"]])
+            x = x.reshape(-1,*self.tensor_shapes[-2])
         x = self.conv_seq(x)
         return x
 

@@ -42,7 +42,7 @@ class Dataset(DatasetMixin):
         
         # Load parameters from config
         self.config = config
-        #self.latent_dim = config["linear"]["latent_dim"]
+        self.set_random_state()
         # Load every indices from all images
         if "request_tri" in self.config and self.config["request_tri"]:
             every_indices = [int(s[12:-6]) for s in os.listdir(self.data_root + "/images/")]
@@ -54,18 +54,22 @@ class Dataset(DatasetMixin):
         
         # Split data into validation and training data 
         split = int(np.floor(config["validation_split"] * len(all_indices)))
-        if config["shuffle_dataset"]:
-            if "random_seed" in config:
-                np.random.seed(config["random_seed"])
+        if self.config["shuffle_dataset"]:
             np.random.shuffle(all_indices)        
         # Load training or validation images as well as their indices
         if train:
             self.indices = all_indices[split:]
-            train_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
         else:
             self.indices = all_indices[:split]
-            valid_sampler = torch.utils.data.SubsetRandomSampler(self.indices)
-        self.actual_epoch = 0
+
+    def set_random_state(self):
+        if "random_seed" in self.config:
+            np.random.seed(self.config["random_seed"])
+            torch.random.manual_seed(self.config["random_seed"])
+        else:
+            self.config["random_seed"] = np.random.randint(0,2**32-1)
+            np.random.seed(self.config["random_seed"])
+            torch.random.manual_seed(self.config["random_seed"])
 
     def __len__(self):
         """This member function returns the length of the dataset

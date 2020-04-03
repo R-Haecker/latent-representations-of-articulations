@@ -23,6 +23,7 @@ class Iterator(TemplateIterator):
         self.set_gpu()
         # get the config and the logger
         self.config = config
+        self.set_random_state()
         # Config will be tested inside the Model class even for the iterator
         self.logger = get_logger("Iterator")
         # Log the architecture of the model
@@ -30,16 +31,13 @@ class Iterator(TemplateIterator):
         netD = model.discriminator
         netD.to(self.device)
         self.netD = netD.apply(weights_init)
-        # Log the architecture of the discriminator
-        self.logger.debug(f"{netD}")
-        self.optimizerD = torch.optim.Adam(self.netD.parameters(), lr=self.config["learning_rate"], betas=(self.config["beta1"], 0.999) )  #weight_decay=self.config["weight_decay"])
+        amp = self.config["optimization"]["factor_disc_lr"] if "factor_disc_lr" in self.config["optimization"] else 1
+        self.optimizerD = torch.optim.Adam(self.netD.parameters(), lr=self.config["learning_rate"] * amp, betas=(self.config["beta1"], 0.999) )  #weight_decay=self.config["weight_decay"])
 
         netG = model.generator
         self.netG = netG.to(self.device)
         # can not init weights with VUNet module: NormConv2d
         # self.netG.enc = netG.enc.apply(weights_init)
-        # Log the architecture of the generator
-        self.logger.debug(f"{netG}")
         self.optimizerG = torch.optim.Adam(self.netG.parameters(), lr=self.config["learning_rate"], betas=(self.config["beta1"], 0.999) )
 
         self.real_label = torch.ones(self.config["batch_size"], device=self.device)
@@ -47,7 +45,10 @@ class Iterator(TemplateIterator):
         if "variational" in self.config:
             # get the offset for the sigmoid regulator for the variational part of the loss 
             self.x_offset_KLD = self.offset_KLD_weight()
-        #TODO for future log random seed if needed
+    
+    def set_random_state(self):
+        np.random.seed(self.config["random_seed"])
+        torch.random.manual_seed(self.config["random_seed"])
 
     def prepare_logs(self, losses, input_images, G_output_images):
         """Return a log dictionary with all instersting data to log."""
@@ -76,49 +77,72 @@ class Iterator(TemplateIterator):
         walk(logs, conditional_convert2np, inplace=True)
         return logs
 
-    def criterion(self, D_output_real, D_output_fake, G_D_output_fake, input_images, G_output_images):
+    def criterion(self, D_output_real, D_output_fake, G_D_output_fake, input_images, G_output_images, D_output_fake_sampled = None, G_D_output_fake_sampled = None):
         """This function returns a dictionary with all neccesary losses for the model."""
+        # convert to numpy
+        real   = np.mean(pt2np(D_output_real, False))
+        fake   = np.mean(pt2np(D_output_fake, permute=False))
+        fake2 = np.mean(pt2np(G_D_output_fake, permute=False))
+        
+        losses = {}
+        losses["D_outputs"] = {}
+        losses["D_outputs"]["real"]  = real
+        losses["D_outputs"]["fake"]  = fake
+        if D_output_fake_sampled != None:
+            losses["D_outputs"]["fake_sampled"]  = np.mean(pt2np(D_output_fake_sampled, False))
         ###################
         ## Discriminator ##
         ###################
         self.netD.zero_grad()
-        BCE = nn.BCELoss()
+        disc_loss = get_loss_funct(self.config["losses"]["discriminator_loss"])
         # real images
-        D_loss_real = BCE(D_output_real, self.real_label)
+        D_loss_real = disc_loss(D_output_real, self.real_label)
         # fake images
-        D_loss_fake = BCE(D_output_fake, self.fake_label)
-        # total D_loss
-        D_loss = (D_loss_fake + D_loss_real)/2
+        D_loss_fake = disc_loss(D_output_fake, self.fake_label)
+        # sampled fake images
+        if D_output_fake_sampled != None:
+            D_loss_fake_sampled = disc_loss(D_output_fake_sampled, self.fake_label)
+            # total D_loss
+            D_loss = D_loss_fake + D_loss_real + D_loss_fake_sampled
+        else:
+            # total D_loss
+            D_loss = D_loss_fake + D_loss_real
         
         ###################
         #### Generator ####
         ###################
         self.netG.zero_grad()
-        G_D_loss = BCE(G_D_output_fake, self.real_label)
+        G_D_loss_recon = disc_loss(G_D_output_fake, self.real_label)
+        if G_D_output_fake_sampled != None:
+            G_D_loss_sampled = disc_loss(G_D_output_fake_sampled, self.real_label) 
+            G_D_loss = G_D_loss_recon + G_D_loss_sampled
+        else:
+            G_D_loss = G_D_loss_recon
         
-        losses = {}
-        D_real_mean   = np.mean(pt2np(D_output_real, False))
-        D_fake_mean   = np.mean(pt2np(D_output_fake, permute=False))
+        # save losses
         D_loss_       = torch.mean(D_loss)
-        G_D_output_mean = np.mean(pt2np(G_D_output_fake, permute=False))
+        D_loss_fake_  = np.mean(pt2np(D_loss_fake, False))
+        D_loss_real_  = np.mean(pt2np(D_loss_real, False))
+        losses["D_loss"] = D_loss_
+        losses["D_loss_fake"] = D_loss_fake_
+        losses["D_loss_real"] = D_loss_real_
+        
         G_D_loss_       = torch.mean(G_D_loss)
-        # This function will always execute
-        losses = {    
-            "D_real_mean":D_real_mean,
-            "D_fake_mean":D_fake_mean,
-            "D_Loss":D_loss_,
-            "G_D_fake_mean":G_D_output_mean,
-            "G_D_Loss":G_D_loss_
-            }
+        G_D_loss_recon_ = torch.mean(G_D_loss_recon)
+        losses["G_D_loss"] = G_D_loss_
+        losses["G_D_loss_recon"] = G_D_loss_recon_
+        
+        if "optimization" in self.config and "latent_sample" in self.config["optimization"] and self.config["optimization"]["latent_sample"]:
+            losses["D_loss_fake_sampled"] = np.mean(pt2np(D_loss_fake_sampled, permute=False))
+            losses["G_D_loss_sampled"] = np.mean(pt2np(G_D_loss_sampled, permute=False))
 
         # only use if the vae model is used
         if "conv" in self.config:
             # calculate all losses according to reconstruction
             losses["reconstruction_loss"] = self.reconstruction_losses(recon_input = input_images, reconstructed_image = G_output_images)
-            # TODO think about how to weight the recon loss with the discriminator loss
-            losses["G_Loss"] = G_D_loss_ + losses["reconstruction_loss"]["total_loss"]
+            losses["G_loss"] = G_D_loss_ + losses["reconstruction_loss"]["total_loss"]
         else:
-            losses["G_Loss"] = G_D_loss_
+            losses["G_loss"] = G_D_loss_
         return losses        
 
     def step_op(self, model, **kwargs):
@@ -141,21 +165,55 @@ class Iterator(TemplateIterator):
             # generated image
         D_output_fake = self.netD(G_output_images.detach()).view(-1)
         
+        if "optimization" in self.config and "latent_sample" in self.config["optimization"] and self.config["optimization"]["latent_sample"]:
+            mu_ = torch.rand([self.config["batch_size"], self.netG.latent_dim], device = self.device)
+            G_output_sampled_images = self.netG.latent_sample(mu = mu_)
+            G_D_output_fake_sampled = self.netD(G_output_sampled_images).view(-1)
+            D_output_fake_sampled = self.netD(G_output_sampled_images.detach()).view(-1)
+        else:
+            D_output_fake_sampled = None
+            G_D_output_fake_sampled = None
+
         # create all losses
-        losses = self.criterion(D_output_real = D_output_real, D_output_fake = D_output_fake, G_D_output_fake = G_D_output_fake, input_images = input_images, G_output_images = G_output_images)
+        losses = self.criterion(D_output_real = D_output_real, D_output_fake = D_output_fake, G_D_output_fake = G_D_output_fake, input_images = input_images, 
+                                G_output_images = G_output_images, D_output_fake_sampled = D_output_fake_sampled, G_D_output_fake_sampled = G_D_output_fake_sampled)
             
         def train_op():
             # This function will be executed if the model is in training mode
-            if self.choose_G_loss(G_loss = losses["G_D_Loss"], D_loss = losses["D_Loss"]):
-            # choose if generator or discriminator will be updated
-                losses["G_Loss"].backward()
+            if self.config["optimization"]["update"] == "one":
+                G , D = self.get_comparable_losses(losses)
+                if G > D:
+                # choose if generator or discriminator will be updated
+                    losses["G_loss"].backward()
+                    self.optimizerG.step()
+                    losses["Update_Generator"] = 1
+                    losses["Update_Discriminator"] = 0
+                else:
+                    losses["D_loss"].backward()
+                    self.optimizerD.step()
+                    losses["Update_Generator"] = 0
+                    losses["Update_Discriminator"] = 1
+            elif self.config["optimization"]["update"] == "one_prob":
+                if self.choose_G_loss(*self.get_comparable_losses(losses)):
+                # choose if generator or discriminator will be updated
+                    losses["G_loss"].backward()
+                    self.optimizerG.step()
+                    losses["Update_Generator"] = 1
+                    losses["Update_Discriminator"] = 0
+                else:
+                    losses["D_loss"].backward()
+                    self.optimizerD.step()
+                    losses["Update_Generator"] = 0
+                    losses["Update_Discriminator"] = 1
+            elif self.config["optimization"]["update"] == "both":
+                # update both generator and discriminator will be updated
+                losses["G_loss"].backward()
                 self.optimizerG.step()
-                losses["update_generator"] = 1
-            else:
-                losses["D_Loss"].backward()
+                losses["D_loss"].backward()
                 self.optimizerD.step()
-                losses["update_generator"] = 0
-
+                losses["Update_Generator"] = 1
+                losses["Update_Discriminator"] = 1
+                
         def log_op():
             logs = self.prepare_logs(losses, input_images = input_images, G_output_images = G_output_images)
             return logs
@@ -167,6 +225,15 @@ class Iterator(TemplateIterator):
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
     
+    def get_comparable_losses(self, losses):
+        if "optimization" in self.config and "latent_sample" in self.config["optimization"] and self.config["optimization"]["latent_sample"]:
+            compare_D_loss = losses["D_loss"]/3
+            compare_G_loss = losses["G_D_loss"]/2
+        else:
+            compare_D_loss = losses["D_loss"]/2
+            compare_G_loss = losses["G_D_loss"]
+        return [compare_G_loss, compare_D_loss]        
+
     def save(self, checkpoint_path):
         '''Save the weights of the model to the checkpoint_path.'''
         # TODO check if model.state works with disc and gen
@@ -196,15 +263,21 @@ class Iterator(TemplateIterator):
 
     def choose_G_loss(self, G_loss, D_loss, a = 0.05, b = 0.7, c = 1.4):
         with torch.no_grad():
-            delta = pt2np(G_loss - D_loss, permute = False)
+            delta = pt2np( G_loss - D_loss, permute = False)
             if delta < 0:
                 G_higher = False
                 delta = np.abs(delta)
             else:
                 G_higher = True 
             sigma = delta/c + np.maximum(0,(-delta+b)/(b))*a
-            norm = np.random.normal(delta, sigma)
-            return not G_higher if norm < 0 else G_higher
+            
+            delta = np2pt(delta, permute = False)
+            sigma = np2pt(sigma, permute = False)
+
+            norm_dist = torch.distributions.normal.Normal(delta, sigma)
+            res = norm_dist.sample()
+            #norm = np.random.normal(delta, sigma)
+            return not G_higher if res < 0 else G_higher
 
     def reconstruction_losses(self, recon_input, reconstructed_image):
         # get the reconstruction loss

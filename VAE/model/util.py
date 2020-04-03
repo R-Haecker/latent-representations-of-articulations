@@ -24,27 +24,36 @@ def get_tensor_shapes(config, encoder = True):
                 spacial_res = int(spacial_res - 1 )
             tensor_shapes.append([config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])    
     else:
-    '''
+    '''    
+    if "first_layer" in config["conv"] and config["conv"]["first_layer"]:
+        tensor_shapes.append([config["conv"]["conv_channels"][1], config["image_resolution"][0], config["image_resolution"][1] ])
+        range_ = [1, config["conv"]["n_blocks"] + 1 ]
+    else:
+        range_ = [0, config["conv"]["n_blocks"]]
     # normal formular to compute the tensor shapes     
-    for i in range(config["conv"]["n_blocks"]): 
+    for i in range(*range_):
         # calculate the spacial resolution after the formular given from pytorch
         spacial_res = (int((tensor_shapes[i][-1] + 2 * config["conv"]["padding"] - config["conv"]["kernel_size"] - 2)
                     /config["conv"]["stride"] + 1) + 1)
         if "upsample" in config:
             spacial_res = int(np.floor(spacial_res/2) +1) 
-        if encoder and i == config["conv"]["n_blocks"]-1 and not "linear" in config and "variational" in config and "sigma" in config["variational"] and config["variational"]["sigma"]:
+        if encoder and i == range_[1] - 1 and not "linear" in config and "variational" in config and "sigma" in config["variational"] and config["variational"]["sigma"]:
             tensor_shapes.append([config["conv"]["conv_channels"][i+1] * 2, spacial_res, spacial_res])
         else:
             tensor_shapes.append([config["conv"]["conv_channels"][i+1], spacial_res, spacial_res])
-                
+            
     # add the shape of the flatten image if a fc linaer layer is available
     if "variational" in config or "linear" in config:
-        flatten_rep = tensor_shapes[config["conv"]["n_blocks"]][1] * tensor_shapes[config["conv"]["n_blocks"]][2] * tensor_shapes[config["conv"]["n_blocks"]][0] #config["conv"]["conv_channels"][config["conv"]["n_blocks"]]
+        flatten_rep = tensor_shapes[range_[1]][1] * tensor_shapes[range_[1]][2] * tensor_shapes[range_[1]][0] #config["conv"]["conv_channels"][config["conv"]["n_blocks"]]
         tensor_shapes.append([flatten_rep])
         if "linear" in config:
             tensor_shapes.append([config["linear"]["latent_dim"]])
 
     return tensor_shapes
+
+def set_random_state(config):
+    np.random.seed(config["random_seed"])
+    torch.random.manual_seed(config["random_seed"])
 
 def test_config(config):
     ''' Test the config if it will work with the VAE_Model.'''
@@ -64,9 +73,15 @@ def test_config(config):
     # Test config for iterator parameters
     assert "losses" in config, "You have to specify the losses used in the model in config['losses']"
     assert "reconstruction_loss" in config["losses"], "The config must contain and define a Loss function for image reconstruction. possibilities:{'L1','L2'or'MSE'}."
+    if config["model"] == "model.gan.GAN":
+        assert "discriminator_loss" in config["losses"], "if you are training a GAN you need to specify a discriminator loss e.g. 'BCE' or 'L2'"
+        assert "optimization" in config , "If you are training a GAN you need to specify: config['optimization']['update'] with: 'one', 'one_prob', 'both'. No config['optimization'] found!"
+        assert "update" in config["optimization"] , "If you are training a GAN you need to specify: config['optimization']['update'] with: 'one', 'one_prob', 'both'. No config['optimization']['update'] found!"
+        assert config["optimization"]["update"] in ["one", "one_prob", "both"], "You have to choose from the given options."
     assert "learning_rate" in config, "The config must contain and define a the learning rate."
 
 def complete_config(config, logger):
+    assert "random_seed" in config, "If you use the normla data set there should be a 'random_seed' in the config."
     if type(config["image_resolution"])!=list:
         config["image_resolution"]=[config["image_resolution"], config["image_resolution"]]
     if "n_channel_start" in config["conv"] and "n_channel_max" in config["conv"]:
@@ -95,6 +110,8 @@ def complete_config(config, logger):
             for i in range(config["conv"]["n_blocks"]):
                 config["conv"]["conv_channels"].append(channels)
                 channels = int( np.minimum(int(channels*2),config["conv"]["n_channel_max"]) )
+            if "first_layer" in config["conv"] and config["conv"]["first_layer"]:
+                config["conv"]["conv_channels"].append(channels)
     if "padding" not in config["conv"] or "upsample" in config or config["conv"]["padding"] == None:
         if config["conv"]["kernel_size"]%2 == 0:
             config["conv"]["padding"] = 0
