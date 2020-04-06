@@ -2,7 +2,7 @@
 code_root: null
 integrations:
   wandb:
-    active: True
+    active: False
     project: "Debug!"
 
 # Dataset info
@@ -11,17 +11,28 @@ datasets:
   validation: data.dataset.DatasetEval
 data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/only_dir_light_some_camera_theta
 
+filter:
+  same_filter: False
+  train:
+    total_branches: null
+    #scale: [1.6,2]
+    #theta: [0,2]
+    total_cuboids: 4
+    #same_material: True
+  validation:
+
+
 request_parameters: False
 request_pose: False
 request_tri: False
 validation_split: 0.1
-shuffle_dataset: True
+shuffle_dataset: False
 image_resolution: 64
 
 # Meta Info
 #explanation: "GAN with VAE var reconstruction weight."
 debug_log_level: True
-CUDA_VISIBLE_DEVICES: 5
+#CUDA_VISIBLE_DEVICES: 5
 
 # Iterator info
 iterator: iterator.iterator.Iterator
