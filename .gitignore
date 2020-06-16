@@ -1,13 +1,13 @@
 **test.py
 **/wandb
 **/logs
-data/*
-data_parameters/*
 .ipynb_checkpoints*
 **/__pycache__
 .vscode
 **.bin
 **.ddl
 **.asset
+data/data_sets/*
+data/data_parameters/*
 eval/notebooks/*
 eval/results/*
