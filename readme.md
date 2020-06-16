@@ -1,5 +1,5 @@
 # Representation of three dimensional Objects <br/> using Neural Networks
-The code provided in this reposoitory was created during my bachelor thesis in the research group Computer Vision at the Heidelberg Collaboratory for Image processing.  
+The code provided in this reposoitory was created during my bachelor thesis in the research group Computer Vision, at the Heidelberg Collaboratory for Image processing.  
 Below you can find a brief description of this work, for all details you should have a look [here](Bachelor_Thesis.pdf).    
 ## Abstract
 > In this thesis we will investigate the mapping from the image space to the latent space using neural networks. We will focus on image data sets, specifically created to display three-dimensional objects with exact labeled articulations. Using a variational autoencoder in combination with a discriminative network, the aim is to extract and investigate information about articulations from images. This enables us to explore and compare the mapping of specific articulation parameters onto the latent space. The main contribution of this work is the comparison between natural interpolations of articulations and different interpolations in the latent space. Furthermore, we investigate how a metric loss improves the model and how a discriminator helps expand the latent space around observations.
@@ -7,23 +7,26 @@ Below you can find a brief description of this work, for all details you should 
 ## Model
 We used an Variational Autoencoder (VAE) and an adversarial Discriminator as our model.  
 The architecture used for the Variational Autoencoder is shown in the following figure.
+
 ![alt text](https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/vae-architecture.png)
 
-### Discriminator Loss
-![alt text](https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/discriminator_loss.png)
+### **Discriminator Loss**
+<img src="https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/discriminator_loss.png" width="350" height="210">
 
-### VAE Loss
-![alt text](https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/vae_loss.png)
+### **VAE Loss**
+<img src="https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/vae_loss.png" width="350" height="210">
 
 ## Data sets
 We use data sets created with tools from this [repository](https://github.com/R-Haecker/python_unity_images/).
 
-### 1) Phi Data set
+### 1) **Phi Data set**
 This data set consist of 10,000 samples containing only one articulation of two cuboids while varying the parameter Phi as shown below. Hence, the articulation is horizontally rotated without any other changes throughout the whole data set.
+
 ![alt text](https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/data/phi_data.png)
 
-### 2) Varied Data set
+### 2) **Varied Data set**
 This data set consists of 500,000 samples displaying between two and four cuboids. To create this diversified data set we vary the articulation parameters Phi Theta and Lambda while allowing different angles between the cuboids but not different scales of cuboids. To introduce even more complexity we will not only vary the articulation parameters but including the appearances and lighting parameters into into the parameter space. This enables different colors, directional lights, up to four spotlights and four point lights with different settings to be randomly chosen in every image. Therefore, creating the following examples.
+
 ![alt text](https://github.com/R-Haecker/latent-representations-of-articulations/raw/master/eval/readme_figures/data/examples_big_var_phi_theta_scale.png)
 
 ## Experiments
@@ -87,8 +90,8 @@ We use again a UMAP dimension reduction to compare the two interpolations.
 &nbsp;&nbsp;&nbsp;&nbsp; Updating the inferior network with additional randomness  
 
 **PCA sampling in the latent space**  
-&nbsp;&nbsp;&nbsp;&nbsp; linear PC no representation of an articulation parameter  
-&nbsp;&nbsp;&nbsp;&nbsp; metric loss does not improve correlation  
+&nbsp;&nbsp;&nbsp;&nbsp; linear PC can not represent an articulation parameter  
+&nbsp;&nbsp;&nbsp;&nbsp; metric loss does not improve correlation 
 
 **Interpolation in latent space**  
 &nbsp;&nbsp;&nbsp;&nbsp; linear interpolation better than a spherical interpolation  
