@@ -9,3 +9,5 @@ data_parameters/*
 **.bin
 **.ddl
 **.asset
+eval/notebooks/*
+eval/results/*
