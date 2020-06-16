@@ -10,23 +10,14 @@ datasets:
   train: data.dataset.DatasetTrain
   validation: data.dataset.DatasetEval
 data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/big_var_phi_theta_scale
-#big_var_phi_theta_scale
 
 #filter:
-#  same_filter: False
-#  train:
-    #total_branches: null
-    #scale: [1.6,2]
-    #theta: [0,2]
-    #total_cuboids: 2
-    #r: [0.99,1]
-    #totalPointLights: [0,5]
-  #validation:
-      #total_cuboids: 2
-
-#checkpoint_root: /export/home/rhaecker/documents/research-of-latent-representation/GAN/logs/2020-05-02T14-16-28_gan_big_phi_theta_scale_test_big_metric/train/checkpoints/
-
-request_parameters: True
+  #same_filter: True
+  #local: True
+  #train:
+    #CameraRes_height: 512
+    
+request_parameters: False
 
 request_pose: False
 request_tri: False
@@ -36,7 +27,7 @@ shuffle_train: True
 image_resolution: 64
 
 # Meta Info
-explanation: "GAN with VAE big data phi theta scale with metric and latent sample."
+explanation: "GAN with VAE and big_var_phi_theta_scale data. red_lr 0.8, acc 0.65, lr 0.00005, test dlr, test latent sample with metric."
 debug_log_level: False
 #CUDA_VISIBLE_DEVICES: 5
 
@@ -45,16 +36,16 @@ iterator: iterator.iterator.Iterator
 model: model.gan.GAN
 batch_size: 32
 #num_epochs: 1
-num_steps: 500000
+num_steps: 100000
 #70000
 random_seed: 13831
 
 optimization: #to implement
-  latent_sample: True
+  latent_sample: False
   update: "accuracy" # "one" "one_prob" "both" "accuracy"
   accuracy_threshold: 0.65
-  #factor_disc_lr: 2
-  #reduce_lr: 0.5
+  factor_disc_lr: 1
+  reduce_lr: 0.8
 
 losses:
   metric_loss:
@@ -65,7 +56,7 @@ losses:
     weight: 20
   discriminator_loss: "BCE" # "L2" "BCE"
   reconstruction_loss: "L2"
-  reconstruction_loss_weight: 500
+  reconstruction_loss_weight: 10000
   #view_loss: "L1"
   KLD_loss:
     start_step: 20000
@@ -73,7 +64,7 @@ losses:
     amplitude: 0.0001
 
 # Generator
-learning_rate: 0.0001
+learning_rate: 0.00005
 beta1: 0.5
 weight_decay: 0.000001 
 #log_freq: 2000

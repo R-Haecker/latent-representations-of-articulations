@@ -3,27 +3,38 @@ code_root: null
 integrations:
   wandb:
     active: True
-    project: "GAN"
+    project: "GAN_phi"
 
 # Dataset info
 datasets:
   train: data.dataset.DatasetTrain
   validation: data.dataset.DatasetEval
-data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/only_dir_big
-#
-#only_dir_light_some_camera_theta
-#
+data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/phi_seq
+
+#filter:
+#  same_filter: False
+#  train:
+    #total_branches: null
+    #scale: [1.6,2]
+    #theta: [0,2]
+    #total_cuboids: 2
+    #r: [0.99,1]
+    #totalPointLights: [0,5]
+  #validation:
+      #total_cuboids: 2
+
+# not working right now
 request_parameters: False
+
 request_pose: False
 request_tri: False
 validation_split: 0.1
 shuffle_dataset: False
+shuffle_train: True
 image_resolution: 64
 
 # Meta Info
-explanation: "GAN with VAE without sigma and sampling both networks updating and discriminator with double the learning rate with big data set."
-#" big data set."
-#""
+explanation: "GAN with VAE dataset phi with final layer variable kernel size bigger recon weight."
 debug_log_level: False
 #CUDA_VISIBLE_DEVICES: 5
 
@@ -31,20 +42,21 @@ debug_log_level: False
 iterator: iterator.iterator.Iterator
 model: model.gan.GAN
 batch_size: 10
-num_epochs: 20
-#125
-#7
+#num_epochs: 1
+num_steps: 100000 
+#70000
 random_seed: 13831
 
-optimization:
+optimization: #to implement
   latent_sample: True
-  update: "both"
+  update: "both" # "one" "one_prob"
   factor_disc_lr: 2
+  reduce_lr: 0.8
 
 losses:
-  discriminator_loss: "BCE"
+  discriminator_loss: "BCE" # "L2" "BCE"
   reconstruction_loss: "L2"
-  reconstruction_loss_weight: 100
+  reconstruction_loss_weight: 500
   #view_loss: "L1"
   KLD_loss:
     start_step: 20000
@@ -67,4 +79,5 @@ conv:
   n_channel_start: 32
   n_channel_max: 128
   first_layer: True
-  final_layer: True 
+  final_layer: True
+  final_layer_kernel_size: 4

@@ -1,0 +1,94 @@
+activation_function: ReLU
+batch_norm: true
+batch_size: 32
+beta1: 0.5
+ckpt_freq: null
+ckpt_zero: false
+code_root: null
+conv:
+  conv_channels:
+  - 3
+  - 32
+  - 64
+  - 128
+  - 128
+  - 128
+  - 128
+  - 128
+  final_layer: true
+  final_layer_kernel_size: 4
+  first_layer: true
+  kernel_size: 3
+  n_blocks: 6
+  n_channel_max: 128
+  n_channel_start: 32
+  padding: 1
+  stride: 2
+data_root: /export/home/rhaecker/documents/research-of-latent-representation/data/phi_seq
+datasets:
+  train: data.dataset.DatasetTrain
+  validation: data.dataset.DatasetEval
+debug_log_level: false
+eval_hook:
+  eval_callbacks: {}
+  eval_op: validation/eval_op
+explanation: GAN with VAE data phi with metric 03,30, update with accuracy 0.65, lr
+  0.00005, reduce_lr 0.7,  double lr, latent sample, batchsize 32, 50k steps.
+hook_freq: 1
+image_resolution:
+- 64
+- 64
+integrations:
+  tensorboard:
+    active: false
+    handlers:
+    - scalars
+    - images
+    - figures
+  wandb:
+    active: true
+    entity: null
+    handlers:
+    - scalars
+    - images
+    project: GAN
+iterator: iterator.iterator.Iterator
+learning_rate: 5.0e-05
+log_freq: 1000
+log_ops:
+- train/log_op
+- validation/log_op
+losses:
+  KLD_loss:
+    amplitude: 0.0001
+    start_amplitude: 1.0e-05
+    start_step: 20000
+    width: 700
+  discriminator_loss: BCE
+  metric_loss:
+    alpha_margin: 0.3
+    phi_margin: 30
+    weight: 50
+  reconstruction_loss: L2
+  reconstruction_loss_weight: 10000
+model: model.gan.GAN
+num_steps: 150000
+optimization:
+  accuracy_threshold: 0.65
+  factor_disc_lr: 2
+  latent_sample: true
+  reduce_lr: 0.7
+  update: accuracy
+random_seed: 13831
+request_parameters: true
+request_pose: false
+request_tri: false
+shuffle_dataset: true
+shuffle_train: true
+start_log_freq: 1
+train_ops:
+- train/train_op
+validation_split: 0.1
+variational:
+  sigma: true
+weight_decay: 1.0e-06
