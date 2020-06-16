@@ -2,3 +2,9 @@
 **/wandb
 **/logs
 data/*
+.ipynb_checkpoints*
+**/__pycache__
+.vscode
+**.bin
+**.ddl
+**.asset
