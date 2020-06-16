@@ -1,7 +1,0 @@
-run_path: "/export/home/rhaecker/documents/Machine-Learning-on-individual-data/logs/"
-run_name: "conv_lin_var_upsample_"
-amount_of_runs: 4
-
-explanation: Convolutional same spacial with down and upsample net with varying upsample method.
-
-inputs: False
