@@ -18,7 +18,8 @@ from model.util import (
 from model.modules import (
     NormConv2d,
     Downsample,
-    Upsample
+    Upsample,
+    One_sided_padding
 )
 
 class VAE_Model(nn.Module):
@@ -56,6 +57,11 @@ class VAE_Model(nn.Module):
         self.enc = VAE_Model_Encoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes,     linear = self.linear, variaional = self.variational, sigma = self.sigma, latent_dim = self.latent_dim)
         self.dec = VAE_Model_Decoder(config = config, act_func = self.act_func, tensor_shapes = self.tensor_shapes_dec, linear = self.linear, variaional = self.variational, sigma = self.sigma, latent_dim = self.latent_dim)
     
+    def direct_z_sample(self, z):
+        z = z.to(self.device)
+        x = self.dec(z)
+        return x
+
     def latent_sample(self, mu, var = 1, batch_size = None):
         """Sample in the latent space. Input a gaussian distribution to retrive an image from the decoder.
         
@@ -93,15 +99,23 @@ class VAE_Model(nn.Module):
             if self.sigma:
                 self.mu  = x[:, :self.latent_dim]
                 self.var = torch.abs(x[:, self.latent_dim:]) + 0.0001
+                self.logger.debug("varitaional mu.shape: " + str(self.mu.shape))
+                self.logger.debug("varitaional var.shape: " + str(self.var.shape))
             else:
                 self.mu  = x
                 self.var = 1
+                self.logger.debug("varitaional mu.shape: " + str(self.mu.shape))
             # final latent representatione
-            self.logger.debug("varitaional mu.shape: " + str(self.mu.shape))
-            self.logger.debug("varitaional var.shape: " + str(self.var.shape))
             x = self.mu + self.var * eps
         return x
         
+    def encode_images_to_z(self, x):
+        x = self.enc(x)
+        self.z = self.bottleneck(x)
+        self.logger.debug("output: " + str(self.z.shape))
+        return self.z
+        
+
     def forward(self, x):
         """Encodes an image x into the latent represenation z and returns an image generated from that represenation.
         
@@ -189,12 +203,18 @@ class VAE_Model_Encoder(nn.Module):
         if self.variaional:
             self.logger.debug("Shape is x.shape: " + str(x.shape))
             self.logger.debug("tensor Shapes : " + str(self.tensor_shapes))
-            self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[-1][0]) + "]")
-            x = x.view(-1, self.tensor_shapes[-1][0])
-            self.logger.debug("Shape is x.shape: " + str(x.shape))            
             if self.linear and self.sigma:
                 # maybe absolut value of sigma act ReLu
+                self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[-2][0]) + "]")
+                x = x.view(-1, self.tensor_shapes[-2][0])
+                self.logger.debug("before linear layer x.shape: " + str(x.shape))            
                 x = self.lin_layer(x)
+                self.logger.debug("after linear layer x.shape: " + str(x.shape))            
+            else:
+                self.logger.debug("Shape should be: [" + str(self.config["batch_size"]) + "," + str(self.tensor_shapes[-1][0]) + "]")
+                x = x.view(-1, self.tensor_shapes[-1][0])
+                self.logger.debug("x.shape: " + str(x.shape))            
+        
         #if [x.shape[-2],x.shape[-1]] == [1,1]:
         #    x = x.view(-1,x.shape[1])    
         return x
@@ -252,15 +272,27 @@ class VAE_Model_Decoder(nn.Module):
                 upsample_modules_list.append(self.act_func)
             else:
                 if "final_layer" in self.config["conv"] and self.config["conv"]["final_layer"]:
-                    upsample_modules_list.append(self.conv(self.config["conv"]["conv_channels"][0], self.config["conv"]["conv_channels"][0], kernel_size=1))
+                    if "final_layer_kernel_size" in self.config["conv"]:
+                        kernel_size = self.config["conv"]["final_layer_kernel_size"]
+                        if kernel_size%2 == 1:
+                            padding = int(kernel_size//2)
+                        elif kernel_size%2 == 0:
+                            padding = int((kernel_size/2)-1)
+                            upsample_modules_list.append(One_sided_padding())
+                    else:
+                        kernel_size = 1
+                        padding = 0
+                    upsample_modules_list.append(self.conv(self.config["conv"]["conv_channels"][0], self.config["conv"]["conv_channels"][0], kernel_size=kernel_size, padding = padding))
                 upsample_modules_list.append(nn.Tanh())
         return nn.Sequential(*upsample_modules_list)
 
     def forward(self, x):
         if self.linear:
             x = self.act_func(self.lin_layer(x))
-        if self.variaional or self.linear:
+        if self.variaional and not self.linear:
             x = x.reshape(-1,*self.tensor_shapes[-2])
+        elif self.variaional and self.linear:
+            x = x.reshape(-1,*self.tensor_shapes[-3])
         x = self.conv_seq(x)
         return x
 
@@ -319,6 +351,8 @@ class VAE_Model_Decoder(nn.Module):
 #############################
 #########  Testing  #########
 #############################
+
+
 
 
 

@@ -1,9 +1,8 @@
-
 # The modules in theis file are copied from the VUNet repository: https://github.com/jhaux/VUNet.git
-
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
+import torch.nn.functional as F
 
 class NormConv2d(nn.Module):
     """
@@ -82,3 +81,10 @@ class DepthToSpace(nn.Module):
 class ID_module(nn.Module):
     def forward(self, input):
         return input
+
+class One_sided_padding(nn.Module):
+  def __init__(self, padding = 1):
+      super().__init__()
+      self.pad = padding
+  def forward(self, x):
+      return F.pad(x, (0,self.pad,0,self.pad), mode='constant', value=0)

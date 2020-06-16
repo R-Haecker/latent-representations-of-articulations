@@ -3,6 +3,7 @@ import torchvision
 import torchvision.transforms as transforms
 
 from edflow import get_logger
+from edflow.custom_logging import LogSingleton
 from edflow.data.dataset import DatasetMixin
 from edflow.util import edprint
 
@@ -13,6 +14,10 @@ from skimage import io
 from PIL import Image
 import json
 
+import sys
+sys.path.append("/export/home/rhaecker/documents/research-of-latent-representation/data_loader")
+from modules import filter_dataset
+
 class Dataset(DatasetMixin):
     def __init__(self, config, train=False):
         """Initialize the dataset to load training or validation images according to the config.yaml file. 
@@ -21,15 +26,27 @@ class Dataset(DatasetMixin):
         :param config: This config is loaded from the config.yaml file which specifies all neccesary hyperparameter for to desired operation which will be executed by the edflow framework.
         """
         # Create Logging for the Dataset
+        if "debug_log_level" in config and config["debug_log_level"]:
+            LogSingleton.set_log_level("debug")
         self.logger = get_logger("Dataset")
-        
-        # Get the directory to the data and format it
+    
+        self.data_root = self.get_data_root(config)
+        # Load parameters from config
+        self.config = self.set_image_res(config)
+        self.set_random_state()
+        fd = filter_dataset(self.config, train)
+        self.indices = fd.indices
+    
+    def get_data_root(self, config):
+        # Get the directory to the data
         assert "data_root" in config, "You have to specify the directory to the data in the config.yaml file."
-        self.data_root = config["data_root"]
-        if "~" in self.data_root:
-            self.data_root = os.path.expanduser('~') + self.data_root[self.data_root.find("~")+1:]
-        self.logger.debug("data_root: " + str(self.data_root))
-        
+        data_root = config["data_root"]
+        if "~" in data_root:
+            data_root = os.path.expanduser('~') + data_root[data_root.find("~")+1:]
+        self.logger.debug("data_root: " + str(data_root))
+        return data_root
+    
+    def set_image_res(self, config): 
         # Transforming and resizing images
         if "image_resolution" in config:    
             if type(config["image_resolution"])!=list:
@@ -39,28 +56,7 @@ class Dataset(DatasetMixin):
         else:
             self.logger.info("Images will not be resized! Original image resolution will be used.")
             self.transform = torchvision.transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
-        
-        # Load parameters from config
-        self.config = config
-        self.set_random_state()
-        # Load every indices from all images
-        if "request_tri" in self.config and self.config["request_tri"]:
-            every_indices = [int(s[12:-6]) for s in os.listdir(self.data_root + "/images/")]
-            all_indices = []
-            for i in range(int(np.floor(len(every_indices)/3))):
-                all_indices.append(every_indices[i*3])
-        else:
-            all_indices = [int(s[12:-4]) for s in os.listdir(self.data_root + "/images/")]
-        
-        # Split data into validation and training data 
-        split = int(np.floor(config["validation_split"] * len(all_indices)))
-        if self.config["shuffle_dataset"]:
-            np.random.shuffle(all_indices)        
-        # Load training or validation images as well as their indices
-        if train:
-            self.indices = all_indices[split:]
-        else:
-            self.indices = all_indices[:split]
+        return config
 
     def set_random_state(self):
         if "random_seed" in self.config:
@@ -97,6 +93,7 @@ class Dataset(DatasetMixin):
         '''
         example = {}
         idx = self.indices[int(idx)]
+        example["index"] = idx
         if "request_tri" in self.config and self.config["request_tri"]:
             images = []
             for i in range(3):
@@ -109,12 +106,21 @@ class Dataset(DatasetMixin):
         else:
             if "request_parameters" in self.config and self.config["request_parameters"]:
                 parameters = self.load_parameters(idx)
-                example["parameters"] = parameters
+                example["parameters"] = self.include_only_important(parameters)
             # Load image
             image = self.load_image(idx)
             example["image"] = image
         # Return example dictionary
         return example
+
+    def include_only_important(self, parameters):
+        new_parameters = {}
+        new_parameters["total_cuboids"] = parameters["total_cuboids"]
+        new_parameters["same_theta"] = parameters["same_theta"] 
+        new_parameters["theta"] = parameters["scale"] 
+        new_parameters["scale"] = parameters["scale"] 
+        new_parameters["phi"] = parameters["phi"] 
+        return new_parameters
 
     def load_parameters(self, idx):
         # load a json file with all parameters which define the image 

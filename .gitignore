@@ -2,8 +2,9 @@
 **/wandb
 **/logs
 data/*
+data_parameters/*
 .ipynb_checkpoints*
-#**/__pycache__
+**/__pycache__
 .vscode
 **.bin
 **.ddl

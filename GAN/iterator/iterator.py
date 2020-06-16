@@ -77,17 +77,19 @@ class Iterator(TemplateIterator):
         walk(logs, conditional_convert2np, inplace=True)
         return logs
 
-    def criterion(self, D_output_real, D_output_fake, G_D_output_fake, input_images, G_output_images, D_output_fake_sampled = None, G_D_output_fake_sampled = None):
+    def criterion(self, D_output_real, D_output_fake, G_D_output_fake, input_images, G_output_images, D_output_fake_sampled = None, G_D_output_fake_sampled = None, parameters = None):
         """This function returns a dictionary with all neccesary losses for the model."""
         # convert to numpy
         real   = np.mean(pt2np(D_output_real, False))
         fake   = np.mean(pt2np(D_output_fake, permute=False))
         fake2 = np.mean(pt2np(G_D_output_fake, permute=False))
         
+        
         losses = {}
         losses["D_outputs"] = {}
         losses["D_outputs"]["real"]  = real
         losses["D_outputs"]["fake"]  = fake
+        
         if D_output_fake_sampled != None:
             losses["D_outputs"]["fake_sampled"]  = np.mean(pt2np(D_output_fake_sampled, False))
         ###################
@@ -136,24 +138,49 @@ class Iterator(TemplateIterator):
             losses["D_loss_fake_sampled"] = np.mean(pt2np(D_loss_fake_sampled, permute=False))
             losses["G_D_loss_sampled"] = np.mean(pt2np(G_D_loss_sampled, permute=False))
 
+        if "metric_loss" in self.config["losses"]:
+            metric_loss_mean, amount_triplets = self.triplet_metric_losses(parameters = parameters)
+            if "weight" in self.config["losses"]["metric_loss"]:
+                weight = self.config["losses"]["metric_loss"]["weight"]
+            else:
+                weight = 1
+            weight = torch.tensor([weight], device=self.device)
+            metric_loss_mean = metric_loss_mean * weight
+            losses["metric_loss"] = {}
+            losses["metric_loss"]["mean"] = metric_loss_mean
+            losses["metric_loss"]["amount_triplets"] = amount_triplets
+        else:
+            metric_loss_mean = torch.tensor([0], device=self.device)
         # only use if the vae model is used
         if "conv" in self.config:
             # calculate all losses according to reconstruction
             losses["reconstruction_loss"] = self.reconstruction_losses(recon_input = input_images, reconstructed_image = G_output_images)
-            losses["G_loss"] = G_D_loss_ + losses["reconstruction_loss"]["total_loss"]
+            losses["G_loss"] = G_D_loss_ + losses["reconstruction_loss"]["total_loss"] + metric_loss_mean
         else:
-            losses["G_loss"] = G_D_loss_
+            losses["G_loss"] = G_D_loss_ + metric_loss_mean
+        
+        D_accuracy = self.accuracy_discriminator(D_input_images = D_output_real, D_recon_output = G_D_output_fake, D_sampled_output = G_D_output_fake_sampled)
+        losses["D_outputs"]["accuracy"] = D_accuracy
+                
         return losses        
 
     def step_op(self, model, **kwargs):
         '''This function will be called every step in the training.'''
         # get inputs
         input_images = kwargs["image"]
+        index_ = kwargs["index"]
+        if "request_parameters" in self.config and self.config["request_parameters"]:
+            #print("before parameter")
+            parameters = kwargs["parameters"]
+            #print(parameters)
+        else:
+            parameters = None
+
         input_images = torch.tensor(input_images).to(self.device)
+        print("input_images.shape",input_images.shape)
         ## Generator ##
             # genarate fake images
-        if "conv" in self.config:
-            G_output_images = self.netG(input_images)
+        G_output_images = self.netG(input_images)
             # evaluate generated images
         G_D_output_fake = self.netD(G_output_images).view(-1)
         
@@ -176,10 +203,17 @@ class Iterator(TemplateIterator):
 
         # create all losses
         losses = self.criterion(D_output_real = D_output_real, D_output_fake = D_output_fake, G_D_output_fake = G_D_output_fake, input_images = input_images, 
-                                G_output_images = G_output_images, D_output_fake_sampled = D_output_fake_sampled, G_D_output_fake_sampled = G_D_output_fake_sampled)
+                                G_output_images = G_output_images, D_output_fake_sampled = D_output_fake_sampled, G_D_output_fake_sampled = G_D_output_fake_sampled, 
+                                parameters = parameters)
             
         def train_op():
             # This function will be executed if the model is in training mode
+            #TODO log the learning rate
+            if "reduce_lr" in self.config["optimization"]:
+                # reduce the learning rate if specified
+                losses["current_learning_rate"], losses["amplitude_learning_rate"] = self.update_learning_rate()
+            losses["Update_Generator"] = 0
+            losses["Update_Discriminator"] = 0
             if self.config["optimization"]["update"] == "one":
                 G , D = self.get_comparable_losses(losses)
                 if G > D:
@@ -187,11 +221,9 @@ class Iterator(TemplateIterator):
                     losses["G_loss"].backward()
                     self.optimizerG.step()
                     losses["Update_Generator"] = 1
-                    losses["Update_Discriminator"] = 0
                 else:
                     losses["D_loss"].backward()
                     self.optimizerD.step()
-                    losses["Update_Generator"] = 0
                     losses["Update_Discriminator"] = 1
             elif self.config["optimization"]["update"] == "one_prob":
                 if self.choose_G_loss(*self.get_comparable_losses(losses)):
@@ -199,11 +231,9 @@ class Iterator(TemplateIterator):
                     losses["G_loss"].backward()
                     self.optimizerG.step()
                     losses["Update_Generator"] = 1
-                    losses["Update_Discriminator"] = 0
                 else:
                     losses["D_loss"].backward()
                     self.optimizerD.step()
-                    losses["Update_Generator"] = 0
                     losses["Update_Discriminator"] = 1
             elif self.config["optimization"]["update"] == "both":
                 # update both generator and discriminator will be updated
@@ -213,6 +243,16 @@ class Iterator(TemplateIterator):
                 self.optimizerD.step()
                 losses["Update_Generator"] = 1
                 losses["Update_Discriminator"] = 1
+            elif self.config["optimization"]["update"] == "accuracy":
+                losses["G_loss"].backward()
+                self.optimizerG.step()
+                losses["Update_Generator"] = 1
+                # introduce one percent randomness
+                random_part = torch.rand(1)
+                if (losses["D_outputs"]["accuracy"] < self.config["optimization"]["accuracy_threshold"]) or (random_part < 0.01):
+                    losses["D_loss"].backward()
+                    self.optimizerD.step()
+                    losses["Update_Discriminator"] = 1
                 
         def log_op():
             logs = self.prepare_logs(losses, input_images = input_images, G_output_images = G_output_images)
@@ -221,10 +261,53 @@ class Iterator(TemplateIterator):
         def eval_op():
             # This function will be executed if the model is in evaluation mode
             z = pt2np(self.netG.z, permute = False)
-            return {"labels": {"latent_rep": z }}
+            return {"labels": {"latent_rep": z, "index": index_, "image_output":G_output_images}}
 
         return {"train_op": train_op, "log_op": log_op, "eval_op": eval_op}
-    
+
+    def accuracy_discriminator(self, D_input_images, D_recon_output, D_sampled_output):
+        with torch.no_grad():
+            assert D_input_images.shape == D_recon_output.shape
+            batch_size = D_input_images.shape[0]
+            right_count = 0
+            if D_sampled_output!=None:
+                total_tests = 3 * batch_size
+                assert D_sampled_output.shape == D_recon_output.shape
+                for i in range(batch_size):
+                    if D_input_images[i] > 0.5: right_count += 1 
+                    if D_recon_output[i] <= 0.5: right_count += 1
+                    if D_sampled_output[i] <= 0.5: right_count += 1
+            else:
+                total_tests = 2 * batch_size
+                for i in range(batch_size):
+                    if D_input_images[i] > 0.5: right_count += 1 
+                    if D_recon_output[i] <= 0.5: right_count += 1
+            return right_count/total_tests
+
+    def update_learning_rate(self):
+        step = torch.tensor(self.get_global_step(), dtype = torch.float)
+        num_step = self.config["num_steps"]
+        current_ratio = step/self.config["num_steps"]
+        reduce_lr_ratio = self.config["optimization"]["reduce_lr"]
+        if current_ratio >= self.config["optimization"]["reduce_lr"]:
+            def amplitide_lr(step):
+                delta = (1-reduce_lr_ratio)*num_step
+                return (num_step-step)/delta
+            amp = amplitide_lr(step)
+            lr = self.config["learning_rate"] * amp
+            if "factor_disc_lr" in self.config["optimization"]:
+                dlr = lr * self.config["optimization"]["factor_disc_lr"]
+            else:
+                dlr = lr
+            for g in self.optimizerD.param_groups:
+                g['lr'] = dlr
+            for g in self.optimizerG.param_groups:
+                g['lr'] = lr
+            return lr, amp
+        else:
+            return self.config["learning_rate"], 1
+
+
     def get_comparable_losses(self, losses):
         if "optimization" in self.config and "latent_sample" in self.config["optimization"] and self.config["optimization"]["latent_sample"]:
             compare_D_loss = losses["D_loss"]/3
@@ -238,8 +321,9 @@ class Iterator(TemplateIterator):
         '''Save the weights of the model to the checkpoint_path.'''
         # TODO check if model.state works with disc and gen
         state = {
-            "model": self.model.state_dict(),
+            "netD": self.netD.state_dict(),
             "optimizerD": self.optimizerD.state_dict(),
+            "netG": self.netG.state_dict(),
             "optimizerG": self.optimizerG.state_dict()
         }
         torch.save(state, checkpoint_path)
@@ -247,10 +331,12 @@ class Iterator(TemplateIterator):
     def restore(self, checkpoint_path):
         '''Load the weigths of the model from a previous training.'''
         state = torch.load(checkpoint_path)
-        self.model.load_state_dict(state["model"])
-        self.optimizer.load_state_dict(state["optimizerD"])
-        self.optimizer.load_state_dict(state["optimizerG"])
-    
+        self.netD.load_state_dict(state["netD"])
+        self.optimizerD.load_state_dict(state["optimizerD"])
+        self.netG.load_state_dict(state["netG"])
+        self.optimizerG.load_state_dict(state["optimizerG"])
+
+
     def set_gpu(self):
         """Move the model to device cuda if available and use the specified GPU"""
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -278,6 +364,83 @@ class Iterator(TemplateIterator):
             res = norm_dist.sample()
             #norm = np.random.normal(delta, sigma)
             return not G_higher if res < 0 else G_higher
+
+    def frisrt_old_draft_metric_losses(self, parameters):
+        latent_rep = self.netG.z
+        metric_loss = get_loss_funct(self.config["losses"]["metric_loss"])
+        def delta_degree(alpha, beta, mod = 360):
+            delta = alpha-beta
+            delta_deg = delta%mod if (delta%mod) < (-delta%mod) else -delta%mod
+            return delta_deg
+        delta_phi = []
+        delta_latent = []
+        for i in range(latent_rep.shape[0]):
+            for j in range(i):
+                delta_phi.append(delta_degree(parameters["phi"][i], parameters["phi"][j]))
+                delta_latent.append(metric_loss(latent_rep[i], latent_rep[j]))
+        
+        if "metric_phi" in self.config["losses"]:
+            weight_phi = self.config["losses"]["metric_phi"]
+        else:
+            weight_phi = 1/360 * 0.1
+        weight_phi = torch.tensor([weight_phi], device=self.device)
+        delta_phi = torch.FloatTensor(delta_phi).to(self.device)
+        delta_latent = torch.FloatTensor(delta_latent).to(self.device)
+        loss = torch.abs(delta_latent - delta_phi*weight_phi)
+        mean_loss = torch.mean(loss)
+        return mean_loss
+
+    def triplet_metric_losses(self, parameters):
+        def delta_degree(alpha, beta, mod = 360):
+            delta = alpha-beta
+            delta_deg = delta%mod if (delta%mod) < (-delta%mod) else -delta%mod
+            return delta_deg
+        # retrive triplets with different classes here exeeed a phi threshold
+        batch_size = len(parameters["phi"]) #self.config["batch_size"]
+        phi_threshold = self.config["losses"]["metric_loss"]["phi_margin"]
+        
+        big_metric_loss = True if "big_var_phi_theta_scale" in self.config["data_root"] else False 
+        if big_metric_loss:
+            scale_threshold = self.config["losses"]["metric_loss"]["scale_margin"]
+            theta_threshold = self.config["losses"]["metric_loss"]["theta_margin"]
+        #print(parameters)
+        triplet_list = []
+        for i in range(batch_size):
+            neg_list = []
+            pos_list = []
+            for j in range(batch_size):
+                if j != i:
+                    distance_phi = delta_degree(parameters["phi"][i], parameters["phi"][j])
+                    if big_metric_loss:
+                        if (parameters["total_cuboids"][i] == parameters["total_cuboids"][j]) and (distance_phi <= phi_threshold) and (np.abs(parameters["scale"][i] - parameters["scale"][j]) <= scale_threshold) and (parameters["same_theta"][i] == parameters["same_theta"][j] == True) and (np.abs(parameters["theta"][i] - parameters["theta"][j]) <= theta_threshold): 
+                            pos_list.append(j)
+                        else:
+                            neg_list.append(j)
+                    else:    
+                        if distance_phi <= phi_threshold:
+                            pos_list.append(j)
+                        else:
+                            neg_list.append(j)
+            if len(neg_list) != 0 and len(pos_list) != 0:
+                n_sample = np.random.randint(len(neg_list))
+                p_sample = np.random.randint(len(pos_list))
+                triplet_list.append([i, pos_list[p_sample], neg_list[n_sample]])
+
+        amount_triplets = len(triplet_list)
+        self.logger.debug("Metric Loss amount of triplets " + str(amount_triplets))
+        # init loss
+        trip_losses = torch.zeros([amount_triplets], device=self.device)
+        metric_latent_dist = get_loss_funct("L2")
+        alpha_margin = self.config["losses"]["metric_loss"]["alpha_margin"]
+        alpha_margin = torch.tensor([alpha_margin], device=self.device)
+        for i in range(amount_triplets):
+            idx = triplet_list[i]
+            Dp = metric_latent_dist(self.netG.z[idx[0]], self.netG.z[idx[1]])
+            Dn = metric_latent_dist(self.netG.z[idx[0]], self.netG.z[idx[2]])
+            trip_losses[i] = (Dp**2 - Dn**2 + alpha_margin)
+        trip_losses[trip_losses < 0] = 0
+
+        return torch.mean(trip_losses), amount_triplets
 
     def reconstruction_losses(self, recon_input, reconstructed_image):
         # get the reconstruction loss
